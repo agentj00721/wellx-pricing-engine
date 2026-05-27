@@ -55,7 +55,7 @@ export function StatPill({
         className,
       )}
     >
-      <span className="text-[10.5px] uppercase tracking-[0.18em] text-fg-muted">
+      <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-fg-muted">
         {label}
       </span>
       <span className="wx-display text-xl text-fg wx-mono">{value}</span>

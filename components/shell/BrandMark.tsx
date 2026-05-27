@@ -17,7 +17,7 @@ export function BrandMark({
           wellx
         </span>
         {showSub ? (
-          <span className="text-[9.5px] font-medium uppercase tracking-[0.22em] text-fg-muted mt-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fg-muted mt-1">
             Pricing Engine
           </span>
         ) : null}

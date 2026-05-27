@@ -21,9 +21,9 @@ export function TopBar() {
         <BrandMark showSub={device !== "phone"} />
 
         {device !== "phone" ? (
-          <div className="ml-2 hidden items-center gap-2 sm:flex">
+          <div className="ml-2 hidden items-center gap-2.5 sm:flex">
             <span className="wx-rule w-6" />
-            <span className="text-[11px] uppercase tracking-[0.22em] text-fg-muted">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
               {current.longLabel}
             </span>
           </div>

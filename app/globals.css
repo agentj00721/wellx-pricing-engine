@@ -62,9 +62,9 @@
   --wx-nav-bg: #f4f4f8f0;
   --wx-nav-border: #00000014;
   --wx-text-primary: #0a0a12;
-  --wx-text-secondary: #0a0a128c;
-  --wx-text-muted: #0a0a1261;
-  --wx-text-faint: #0a0a1226;
+  --wx-text-secondary: #0a0a12b8;
+  --wx-text-muted: #0a0a1296;
+  --wx-text-faint: #0a0a1233;
   --wx-rule: #00000012;
   --wx-section-stroke: #0000000f;
   --wx-swatch-shadow: #0000001f;
@@ -94,13 +94,13 @@
   --wx-card-bg: #11111a;
   --wx-card-bg-elev: #15151f;
   --wx-nav-bg: #08080eeb;
-  --wx-nav-border: #ffffff0f;
+  --wx-nav-border: #ffffff1a;
   --wx-text-primary: #ffffff;
-  --wx-text-secondary: #ffffff80;
-  --wx-text-muted: #ffffff40;
-  --wx-text-faint: #ffffff1a;
-  --wx-rule: #ffffff0d;
-  --wx-section-stroke: #ffffff0d;
+  --wx-text-secondary: #ffffffd1;
+  --wx-text-muted: #ffffff96;
+  --wx-text-faint: #ffffff29;
+  --wx-rule: #ffffff14;
+  --wx-section-stroke: #ffffff14;
   --wx-swatch-shadow: #00000080;
   --wx-glow-shadow: rgba(132, 49, 203, 0.4);
   --wx-glow-shadow-warm: rgba(251, 155, 53, 0.32);
@@ -192,9 +192,9 @@ body {
 
 .wx-eyebrow {
   font-family: var(--font-inter), sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   font-size: 11px;
   color: var(--wx-text-muted);
 }
