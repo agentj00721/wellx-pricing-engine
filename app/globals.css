@@ -212,6 +212,17 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+/* Brand wordmark — matches the Wellx canonical lockup.
+   Light mode: deep ink. Dark mode: pure white. */
+.wx-wordmark {
+  color: var(--wx-text-primary);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+[data-theme="dark"] .wx-wordmark {
+  color: #ffffff;
+}
+
 .wx-gradient-text-warm {
   background: var(--wx-gradient-warm);
   -webkit-background-clip: text;
