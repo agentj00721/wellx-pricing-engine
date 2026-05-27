@@ -47,6 +47,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+                <link rel="icon" href="/wellx-icon.svg" type="image/svg+xml" />
+                <link rel="apple-touch-icon" href="/wellx-icon.svg" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
