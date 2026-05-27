@@ -1,26 +1,430 @@
 @import "tailwindcss";
 
+/* ============================================================
+   WELLX VISUAL SYSTEM — design tokens extracted from
+   the canonical Wellx visual reference.
+   Cinematic, editorial, premium. Light + dark dual mode.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette — warm */
+  --wx-orange: #fb9b35;
+  --wx-pink: #f1517b;
+  --wx-purple-pink: #b43082;
+
+  /* Brand palette — cool */
+  --wx-navy: #003780;
+  --wx-purple: #8431cb;
+  --wx-sky: #35c5fc;
+
+  /* Brand neutrals */
+  --wx-slate: #5e788a;
+  --wx-black: #000000;
+
+  /* Signature gradients */
+  --wx-gradient-hero: linear-gradient(
+    135deg,
+    #fb9b35 0%,
+    #f1517b 25%,
+    #b43082 50%,
+    #8431cb 75%,
+    #35c5fc 100%
+  );
+  --wx-gradient-warm: linear-gradient(135deg, #fb9b35, #f1517b, #b43082);
+  --wx-gradient-cool: linear-gradient(135deg, #003780, #8431cb, #35c5fc);
+  --wx-gradient-full: linear-gradient(
+    90deg,
+    #fb9b35,
+    #f1517b,
+    #b43082,
+    #8431cb,
+    #35c5fc
+  );
+  --wx-gradient-soft: linear-gradient(
+    135deg,
+    #fb9b3566,
+    #8431cb66,
+    #35c5fc66
+  );
+  --wx-shimmer: linear-gradient(
+    90deg,
+    transparent,
+    #fb9b3580,
+    #8431cb80,
+    #35c5fc80,
+    transparent
+  );
+
+  /* Default = light mode tokens */
+  --wx-page-bg: #f4f4f8;
+  --wx-card-bg: #ffffff;
+  --wx-card-bg-elev: #fafafd;
+  --wx-nav-bg: #f4f4f8f0;
+  --wx-nav-border: #00000014;
+  --wx-text-primary: #0a0a12;
+  --wx-text-secondary: #0a0a128c;
+  --wx-text-muted: #0a0a1261;
+  --wx-text-faint: #0a0a1226;
+  --wx-rule: #00000012;
+  --wx-section-stroke: #0000000f;
+  --wx-swatch-shadow: #0000001f;
+  --wx-glow-shadow: rgba(132, 49, 203, 0.18);
+  --wx-glow-shadow-warm: rgba(251, 155, 53, 0.22);
+  --wx-code-bg: #ebebf0;
+  --wx-code-text: #0a0a12bf;
+  --wx-success: #1ea97c;
+  --wx-warning: #fb9b35;
+  --wx-danger: #e0345b;
+
+  /* Radii */
+  --wx-radius-xs: 6px;
+  --wx-radius-sm: 10px;
+  --wx-radius: 14px;
+  --wx-radius-lg: 20px;
+  --wx-radius-xl: 28px;
+
+  /* Motion */
+  --wx-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --wx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --wx-duration: 420ms;
 }
 
+[data-theme="dark"] {
+  --wx-page-bg: #08080e;
+  --wx-card-bg: #11111a;
+  --wx-card-bg-elev: #15151f;
+  --wx-nav-bg: #08080eeb;
+  --wx-nav-border: #ffffff0f;
+  --wx-text-primary: #ffffff;
+  --wx-text-secondary: #ffffff80;
+  --wx-text-muted: #ffffff40;
+  --wx-text-faint: #ffffff1a;
+  --wx-rule: #ffffff0d;
+  --wx-section-stroke: #ffffff0d;
+  --wx-swatch-shadow: #00000080;
+  --wx-glow-shadow: rgba(132, 49, 203, 0.4);
+  --wx-glow-shadow-warm: rgba(251, 155, 53, 0.32);
+  --wx-code-bg: #11111a;
+  --wx-code-text: #ffffffa6;
+}
+
+/* Tailwind 4 theme bridge */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-page: var(--wx-page-bg);
+  --color-card: var(--wx-card-bg);
+  --color-card-elev: var(--wx-card-bg-elev);
+  --color-nav: var(--wx-nav-bg);
+  --color-rule: var(--wx-rule);
+  --color-stroke: var(--wx-section-stroke);
+  --color-fg: var(--wx-text-primary);
+  --color-fg-secondary: var(--wx-text-secondary);
+  --color-fg-muted: var(--wx-text-muted);
+  --color-fg-faint: var(--wx-text-faint);
+  --color-wx-orange: var(--wx-orange);
+  --color-wx-pink: var(--wx-pink);
+  --color-wx-magenta: var(--wx-purple-pink);
+  --color-wx-purple: var(--wx-purple);
+  --color-wx-navy: var(--wx-navy);
+  --color-wx-sky: var(--wx-sky);
+  --color-wx-slate: var(--wx-slate);
+  --color-success: var(--wx-success);
+  --color-warning: var(--wx-warning);
+  --color-danger: var(--wx-danger);
+  --font-display: var(--font-raleway);
+  --font-sans: var(--font-inter);
+  --radius-xs: var(--wx-radius-xs);
+  --radius-sm: var(--wx-radius-sm);
+  --radius-md: var(--wx-radius);
+  --radius-lg: var(--wx-radius-lg);
+  --radius-xl: var(--wx-radius-xl);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================================
+   Base
+   ============================================================ */
+
+* {
+  border-color: var(--wx-rule);
+}
+
+html,
+body {
+  background: var(--wx-page-bg);
+  color: var(--wx-text-primary);
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 420ms var(--wx-ease), color 320ms var(--wx-ease);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(132, 49, 203, 0.35);
+  color: var(--wx-text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   Helper classes — composable Wellx atoms
+   ============================================================ */
+
+.wx-display {
+  font-family: var(--font-raleway), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+}
+
+.wx-eyebrow {
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  color: var(--wx-text-muted);
+}
+
+.wx-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "ss01";
+}
+
+.wx-gradient-text {
+  background: var(--wx-gradient-hero);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.wx-gradient-text-warm {
+  background: var(--wx-gradient-warm);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.wx-gradient-text-cool {
+  background: var(--wx-gradient-cool);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.wx-card {
+  background: var(--wx-card-bg);
+  border: 1px solid var(--wx-section-stroke);
+  border-radius: var(--wx-radius-lg);
+  box-shadow: 0 1px 0 var(--wx-rule), 0 20px 60px var(--wx-swatch-shadow);
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 320ms var(--wx-ease),
+    box-shadow 320ms var(--wx-ease),
+    border-color 220ms var(--wx-ease);
+}
+
+.wx-card-elev {
+  background: var(--wx-card-bg-elev);
+}
+
+.wx-card-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--wx-gradient-hero);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.wx-card-quiet {
+  background: var(--wx-card-bg);
+  border: 1px solid var(--wx-rule);
+  border-radius: var(--wx-radius);
+}
+
+.wx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in oklab, var(--wx-text-primary) 5%, transparent);
+  color: var(--wx-text-secondary);
+}
+
+.wx-rule {
+  height: 1px;
+  background: var(--wx-rule);
+  width: 100%;
+}
+
+.wx-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.wx-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--wx-shimmer);
+  transform: translateX(-100%);
+  animation: wx-shimmer 2.6s var(--wx-ease) infinite;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+@keyframes wx-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes wx-orb {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(30px, -20px, 0) scale(1.08);
+  }
+}
+
+@keyframes wx-orb-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-40px, 30px, 0) scale(1.12);
+  }
+}
+
+@keyframes wx-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The signature ambient orbs */
+.wx-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.55;
+  mix-blend-mode: screen;
+}
+
+[data-theme="light"] .wx-orb,
+:root:not([data-theme="dark"]) .wx-orb {
+  mix-blend-mode: multiply;
+  opacity: 0.16;
+  filter: blur(120px);
+}
+
+.wx-grid-overlay {
+  background-image:
+    linear-gradient(var(--wx-section-stroke) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wx-section-stroke) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center center;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.4) 50%,
+    transparent 80%
+  );
+}
+
+.wx-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.wx-scroll::-webkit-scrollbar-thumb {
+  background: var(--wx-text-faint);
+  border-radius: 999px;
+}
+.wx-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wx-focus:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--wx-page-bg),
+    0 0 0 4px var(--wx-purple);
+}
+
+.wx-lift {
+  transition:
+    transform 320ms var(--wx-ease),
+    box-shadow 320ms var(--wx-ease),
+    border-color 220ms var(--wx-ease);
+}
+.wx-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 var(--wx-rule), 0 28px 80px var(--wx-glow-shadow);
+  border-color: color-mix(in oklab, var(--wx-purple) 30%, var(--wx-rule));
+}
+
+.wx-segment {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--wx-text-faint);
+  overflow: hidden;
+  position: relative;
+}
+.wx-segment::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--wx-gradient-full);
+  transform-origin: left;
+  transform: scaleX(var(--wx-progress, 0));
+  transition: transform 600ms var(--wx-ease);
+}
+
+/* Vertical separator with gradient fade */
+.wx-vrule {
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--wx-rule) 20%,
+    var(--wx-rule) 80%,
+    transparent
+  );
 }
