@@ -86,13 +86,14 @@ export async function POST(request: NextRequest) {
 
 const ALLOWED_KEYS = new Set([
   "for_who",
-  "goal",
+  "goals",
   "sourcing",
   "insurer",
   "insurer_other_name",
   "broker_name",
   "broker_contact",
   "company_name",
+  "authorize_wellx_contact",
   "total_people",
   "employee_count",
   "dependant_count",
@@ -123,6 +124,8 @@ function sanitize(input: Record<string, unknown>) {
       out[k] = trimmed.length ? trimmed.slice(0, 2000) : null;
     } else if (Array.isArray(v)) {
       out[k] = v.filter((x) => typeof x === "string").slice(0, 32);
+    } else if (typeof v === "boolean") {
+      out[k] = v;
     } else {
       out[k] = v;
     }
@@ -137,7 +140,15 @@ function validate(p: Record<string, unknown>): string | null {
     return "Invalid sourcing";
   if (p.insurer && !INSURER.has(p.insurer as string))
     return "Invalid insurer";
-  if (p.goal && !GOAL.has(p.goal as string)) return "Invalid goal";
+  if (p.goals !== undefined) {
+    if (!Array.isArray(p.goals)) return "Invalid goals (must be an array)";
+    for (const g of p.goals) {
+      if (typeof g !== "string" || !GOAL.has(g)) return `Invalid goal: ${g}`;
+    }
+  }
+  if (p.authorize_wellx_contact !== undefined && typeof p.authorize_wellx_contact !== "boolean") {
+    return "Invalid authorize_wellx_contact (must be boolean)";
+  }
 
   if (p.contact_email && typeof p.contact_email === "string") {
     if (!/.+@.+\..+/.test(p.contact_email))

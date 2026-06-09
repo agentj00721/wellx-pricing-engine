@@ -22,13 +22,14 @@ export type CustomerLead = {
   forWho?: ForWho;
 
   // team path
-  goal?: BusinessGoal;
+  goals: BusinessGoal[];
   sourcing?: SourcingMethod;
   insurer?: InsurerId;
   insurerOtherName?: string;
   brokerName?: string;
   brokerContact?: string;
   companyName?: string;
+  authorizeWellxContact?: boolean;
   totalPeople: number;
   employeeCount?: number;
   dependantCount?: number;
@@ -43,29 +44,39 @@ export type CustomerLead = {
 
 export const initialLead: CustomerLead = {
   totalPeople: 50,
+  employeeCount: 25,
+  dependantCount: 25,
+  goals: [],
   addOnModules: [],
 };
 
 /* ────────────── Goal options ────────────── */
 
-export const GOALS: {
+export type GoalOption = {
   id: BusinessGoal;
   title: string;
   description: string;
+  badge: string;
   accent: "warm" | "cool";
-}[] = [
+  featured?: boolean;
+};
+
+export const GOALS: GoalOption[] = [
   {
     id: "know-team",
     title: "Get to know my team better",
     description:
       "A behavioural layer that surfaces how people actually feel — so you can act on it.",
+    badge: "Most popular",
     accent: "warm",
+    featured: true,
   },
   {
     id: "retention",
     title: "Retain talent",
     description:
       "Reduce churn, lift employer brand, win the talent war.",
+    badge: "Talent",
     accent: "warm",
   },
   {
@@ -73,6 +84,7 @@ export const GOALS: {
     title: "Drive engagement",
     description:
       "Get high utilisation across your whole population, not just the worried-well.",
+    badge: "Adoption",
     accent: "warm",
   },
   {
@@ -80,12 +92,14 @@ export const GOALS: {
     title: "Bend the claims curve",
     description:
       "Lower medical inflation and the downstream catastrophic claims.",
+    badge: "Economics",
     accent: "cool",
   },
   {
     id: "differentiation",
     title: "Differentiate",
     description: "Stand out as an employer — a real premium benefits proposition.",
+    badge: "Brand",
     accent: "cool",
   },
 ];
@@ -216,9 +230,11 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
     case "self-end":
       return false; // terminal
     case "goal":
-      return !!lead.goal;
+      return lead.goals.length > 0;
     case "sourcing": {
       if (!lead.sourcing) return false;
+      // every B2B path collects the company name
+      if (!lead.companyName?.trim()) return false;
       if (lead.sourcing === "direct") return true;
       // insurer path requires picking one
       if (!lead.insurer) return false;
@@ -254,13 +270,14 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
 export function leadToPayload(lead: CustomerLead) {
   return {
     for_who: lead.forWho ?? null,
-    goal: lead.goal ?? null,
+    goals: lead.goals,
     sourcing: lead.sourcing ?? null,
     insurer: lead.insurer ?? null,
     insurer_other_name: lead.insurerOtherName ?? null,
     broker_name: lead.brokerName ?? null,
     broker_contact: lead.brokerContact ?? null,
     company_name: lead.companyName ?? null,
+    authorize_wellx_contact: lead.authorizeWellxContact ?? false,
     total_people: lead.totalPeople,
     employee_count: lead.employeeCount ?? null,
     dependant_count: lead.dependantCount ?? null,

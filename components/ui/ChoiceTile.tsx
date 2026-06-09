@@ -12,6 +12,7 @@ export function ChoiceTile({
   description,
   hint,
   badge,
+  badgeTone = "neutral",
   className,
 }: {
   selected?: boolean;
@@ -21,6 +22,7 @@ export function ChoiceTile({
   description?: ReactNode;
   hint?: ReactNode;
   badge?: ReactNode;
+  badgeTone?: "neutral" | "warm" | "cool";
   className?: string;
 }) {
   return (
@@ -92,7 +94,25 @@ export function ChoiceTile({
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[14px] text-fg">{title}</span>
             {badge ? (
-              <span className="wx-pill text-[10px]">{badge}</span>
+              badgeTone === "warm" || badgeTone === "cool" ? (
+                <span
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-white"
+                  style={{
+                    background:
+                      badgeTone === "warm"
+                        ? "var(--wx-gradient-warm)"
+                        : "var(--wx-gradient-cool)",
+                    boxShadow:
+                      badgeTone === "warm"
+                        ? "0 4px 12px var(--wx-glow-shadow-warm)"
+                        : "0 4px 12px var(--wx-glow-shadow)",
+                  }}
+                >
+                  {badge}
+                </span>
+              ) : (
+                <span className="wx-pill text-[10px]">{badge}</span>
+              )
             ) : null}
           </div>
           {description && (

@@ -3,7 +3,6 @@
 import { motion } from "motion/react";
 import {
   ArrowRight,
-  Briefcase,
   Building2,
   CheckCircle2,
   Heart,
@@ -174,22 +173,32 @@ export function GoalStep({
 }) {
   return (
     <StepBody
-      eyebrow="01 · Your goal"
+      eyebrow="01 · Your goals"
       title={<>What matters most?</>}
-      description="Pick the single outcome we should optimise for. We use this to shape what we recommend."
+      description="Pick everything that resonates — we use this to shape what we recommend. Multi-select."
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {GOALS.map((g) => (
-          <ChoiceTile
-            key={g.id}
-            selected={lead.goal === g.id}
-            onSelect={() => set({ goal: g.id })}
-            icon={g.id === "know-team" ? <Heart size={18} /> : <Sparkles size={18} />}
-            title={g.title}
-            description={g.description}
-            badge={g.id === "know-team" ? "Behavioural" : undefined}
-          />
-        ))}
+        {GOALS.map((g) => {
+          const selected = lead.goals.includes(g.id);
+          return (
+            <ChoiceTile
+              key={g.id}
+              selected={selected}
+              onSelect={() =>
+                set({
+                  goals: selected
+                    ? lead.goals.filter((id) => id !== g.id)
+                    : [...lead.goals, g.id],
+                })
+              }
+              icon={g.id === "know-team" ? <Heart size={18} /> : <Sparkles size={18} />}
+              title={g.title}
+              description={g.description}
+              badge={g.badge}
+              badgeTone={g.featured ? "warm" : "neutral"}
+            />
+          );
+        })}
       </div>
     </StepBody>
   );
@@ -290,47 +299,26 @@ export function SourcingStep({
 
             {/* Conditional message for arranged insurers */}
             {insurer && insurer.arranged && (
-              <InfoBlock
-                tone="success"
-                title={`We're partnered with ${insurer.short}.`}
-                body={
-                  <>
-                    Ask your broker to embed Wellx in your renewal &mdash;
-                    or you can also buy from us directly. Click{" "}
-                    <strong className="text-fg">Continue</strong> when
-                    ready.
-                  </>
-                }
-              />
-            )}
-
-            {/* Other insurer flow */}
-            {insurer?.id === "other" && (
-              <div className="flex flex-col gap-4">
+              <>
                 <InfoBlock
-                  tone="warning"
-                  title="We don't have an arrangement with them yet."
+                  tone="success"
+                  title={`We're partnered with ${insurer.short}.`}
                   body={
                     <>
-                      Share a few details and we&rsquo;ll work with your
-                      broker or insurer to make it happen. Or click{" "}
-                      <strong className="text-fg">Continue</strong> to buy
-                      direct.
+                      You can ask your broker to embed Wellx in your
+                      renewal, or click <strong className="text-fg">Next</strong>{" "}
+                      to continue your journey directly with us.
                     </>
                   }
                 />
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <TextField
-                    label="Insurer name"
-                    value={lead.insurerOtherName ?? ""}
-                    onChange={(v) => set({ insurerOtherName: v })}
-                    placeholder="e.g. Sukoon"
-                  />
                   <TextField
                     label="Company name"
                     value={lead.companyName ?? ""}
                     onChange={(v) => set({ companyName: v })}
                     placeholder="Your company"
+                    required
                   />
                   <TextField
                     label="Broker name"
@@ -343,6 +331,67 @@ export function SourcingStep({
                     value={lead.brokerContact ?? ""}
                     onChange={(v) => set({ brokerContact: v })}
                     placeholder="Email or phone"
+                    className="sm:col-span-2"
+                  />
+                </div>
+
+                <Checkbox
+                  checked={!!lead.authorizeWellxContact}
+                  onChange={(v) => set({ authorizeWellxContact: v })}
+                  label={
+                    <>
+                      Please connect with my insurer / broker to see if they
+                      can embed Wellx in our plans &mdash; I authorise Wellx
+                      to speak on our behalf.
+                    </>
+                  }
+                />
+              </>
+            )}
+
+            {/* Other insurer flow */}
+            {insurer?.id === "other" && (
+              <div className="flex flex-col gap-4">
+                <InfoBlock
+                  tone="warning"
+                  title="We don't have an arrangement with them yet."
+                  body={
+                    <>
+                      Share a few details and we&rsquo;ll work with your
+                      broker or insurer to make it happen. Or click{" "}
+                      <strong className="text-fg">Next</strong> to buy
+                      direct.
+                    </>
+                  }
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <TextField
+                    label="Insurer name"
+                    value={lead.insurerOtherName ?? ""}
+                    onChange={(v) => set({ insurerOtherName: v })}
+                    placeholder="e.g. Sukoon"
+                    required
+                  />
+                  <TextField
+                    label="Company name"
+                    value={lead.companyName ?? ""}
+                    onChange={(v) => set({ companyName: v })}
+                    placeholder="Your company"
+                    required
+                  />
+                  <TextField
+                    label="Broker name"
+                    value={lead.brokerName ?? ""}
+                    onChange={(v) => set({ brokerName: v })}
+                    placeholder="Broker firm + person"
+                    required
+                  />
+                  <TextField
+                    label="Broker contact"
+                    value={lead.brokerContact ?? ""}
+                    onChange={(v) => set({ brokerContact: v })}
+                    placeholder="Email or phone"
+                    required
                   />
                 </div>
               </div>
@@ -354,12 +403,28 @@ export function SourcingStep({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-4"
           >
             <InfoBlock
               tone="info"
               title="You'll work with Wellx directly."
               body="No middlemen. We'll shape your stack with you and price it directly."
             />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <TextField
+                label="Company name"
+                value={lead.companyName ?? ""}
+                onChange={(v) => set({ companyName: v })}
+                placeholder="Your company"
+                required
+              />
+              <TextField
+                label="Existing broker (if any)"
+                value={lead.brokerName ?? ""}
+                onChange={(v) => set({ brokerName: v })}
+                placeholder="Broker firm + person"
+              />
+            </div>
           </motion.div>
         )}
       </div>
@@ -525,21 +590,28 @@ export function PeopleStep({
   lead: CustomerLead;
   set: (p: Partial<CustomerLead>) => void;
 }) {
-  const missingInsurer =
-    lead.sourcing === "insurer" &&
-    (!lead.insurer ||
-      (lead.insurer === "other" && !lead.brokerName?.trim()));
+  // Roughly half/half split by default. If the user hasn't customised the
+  // split, keep it in sync with the total. If they have, leave their numbers
+  // alone — the Wellx team will reconcile.
+  const half = Math.round(lead.totalPeople / 2);
+  const employees = lead.employeeCount ?? half;
+  const dependants = lead.dependantCount ?? lead.totalPeople - employees;
+  const splitTouched =
+    lead.employeeCount !== undefined || lead.dependantCount !== undefined;
+  const splitMismatch =
+    splitTouched && employees + dependants !== lead.totalPeople;
+
   return (
     <StepBody
       eyebrow="04 · Your people"
-      title={<>Who&rsquo;s in your population?</>}
-      description="We match the census of the covered population. Include employees and dependants — Wellx covers the whole household."
+      title={<>Who&rsquo;s covered by your organisation&rsquo;s health insurance plan?</>}
+      description="Everyone under your plan — employees and their dependants. We use the total to size the work."
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div className="wx-card-quiet p-5 flex flex-col gap-4">
           <div className="flex items-end justify-between flex-wrap gap-3">
             <div>
-              <Eyebrow accent="warm">Total people (incl. dependants)</Eyebrow>
+              <Eyebrow accent="warm">Total people on the plan</Eyebrow>
               <div className="wx-display text-4xl text-fg mt-2 wx-mono">
                 {(lead.totalPeople ?? 0).toLocaleString()}
                 <span className="text-fg-muted text-[14px] font-medium ml-1">
@@ -577,76 +649,39 @@ export function PeopleStep({
           </div>
         </div>
 
-        <div>
-          <Eyebrow accent="warm" className="mb-3">
-            Rough split (optional)
-          </Eyebrow>
-          <div className="grid grid-cols-2 gap-3">
-            <NumberField
-              label="Employees"
-              icon={<Briefcase size={14} className="text-fg-muted" />}
-              value={lead.employeeCount}
-              onChange={(v) => set({ employeeCount: v })}
-              placeholder="—"
-            />
-            <NumberField
-              label="Dependants"
-              icon={<Heart size={14} className="text-fg-muted" />}
-              value={lead.dependantCount}
-              onChange={(v) => set({ dependantCount: v })}
-              placeholder="—"
-            />
-          </div>
-          {(lead.employeeCount ?? 0) + (lead.dependantCount ?? 0) > 0 &&
-            (lead.employeeCount ?? 0) + (lead.dependantCount ?? 0) !==
-              lead.totalPeople && (
-              <p className="mt-2 text-[11.5px] text-[color:var(--wx-orange)]">
-                Heads-up: employees + dependants ={" "}
-                {(
-                  (lead.employeeCount ?? 0) + (lead.dependantCount ?? 0)
-                ).toLocaleString()}{" "}
-                — doesn&rsquo;t match {lead.totalPeople.toLocaleString()}.
-                You can leave them as ranges; the Wellx team will reconcile.
-              </p>
-            )}
+        {/* Compact, de-emphasized 50/50 split. Defaults to half each;
+            user can tweak inline. */}
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-fg-muted px-1">
+          <span>Roughly</span>
+          <InlineNumber
+            value={employees}
+            onChange={(v) => set({ employeeCount: v })}
+            label="employees"
+          />
+          <span>·</span>
+          <InlineNumber
+            value={dependants}
+            onChange={(v) => set({ dependantCount: v })}
+            label="dependants"
+          />
+          {splitTouched && (
+            <button
+              type="button"
+              onClick={() =>
+                set({ employeeCount: undefined, dependantCount: undefined })
+              }
+              className="wx-focus underline-offset-2 hover:underline text-fg-muted"
+            >
+              reset to 50/50
+            </button>
+          )}
+          {splitMismatch && (
+            <span className="text-[color:var(--wx-orange)]">
+              ({(employees + dependants).toLocaleString()} ≠{" "}
+              {lead.totalPeople.toLocaleString()} — team will reconcile)
+            </span>
+          )}
         </div>
-
-        {/* Capture insurer/broker if missed at sourcing step */}
-        {missingInsurer && (
-          <div className="wx-card-quiet p-5 flex flex-col gap-3">
-            <Eyebrow accent="cool">One more thing</Eyebrow>
-            <p className="text-[12.5px] text-fg-secondary">
-              We didn&rsquo;t capture your insurer or broker earlier &mdash;
-              please add them here so we can route your request properly.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <TextField
-                label="Company name"
-                value={lead.companyName ?? ""}
-                onChange={(v) => set({ companyName: v })}
-                placeholder="Your company"
-              />
-              <TextField
-                label="Insurer"
-                value={lead.insurerOtherName ?? ""}
-                onChange={(v) => set({ insurerOtherName: v })}
-                placeholder="If you have one"
-              />
-              <TextField
-                label="Broker name"
-                value={lead.brokerName ?? ""}
-                onChange={(v) => set({ brokerName: v })}
-                placeholder="Broker firm + person"
-              />
-              <TextField
-                label="Broker contact"
-                value={lead.brokerContact ?? ""}
-                onChange={(v) => set({ brokerContact: v })}
-                placeholder="Email or phone"
-              />
-            </div>
-          </div>
-        )}
       </div>
     </StepBody>
   );
@@ -661,10 +696,13 @@ export function ReviewStep({
   lead: CustomerLead;
   set: (p: Partial<CustomerLead>) => void;
 }) {
-  const goal = GOALS.find((g) => g.id === lead.goal);
+  const selectedGoals = GOALS.filter((g) => lead.goals.includes(g.id));
   const insurer = lead.insurer
     ? INSURERS.find((i) => i.id === lead.insurer)
     : null;
+  const half = Math.round(lead.totalPeople / 2);
+  const employees = lead.employeeCount ?? half;
+  const dependants = lead.dependantCount ?? lead.totalPeople - employees;
   return (
     <StepBody
       eyebrow="05 · Review &amp; submit"
@@ -675,16 +713,28 @@ export function ReviewStep({
         <div className="wx-card-quiet p-5">
           <Eyebrow accent="warm" className="mb-3">Your brief</Eyebrow>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
-            <ReviewRow label="Goal" value={goal?.title ?? "—"} />
+            <ReviewRow
+              label={`Goals (${selectedGoals.length})`}
+              value={
+                selectedGoals.length
+                  ? selectedGoals.map((g) => g.title).join(", ")
+                  : "—"
+              }
+              wide
+            />
             <ReviewRow
               label="Sourcing"
               value={
                 lead.sourcing === "direct"
                   ? "Buy direct from Wellx"
                   : insurer
-                    ? `Through ${insurer.short}`
+                    ? `Through ${insurer.short}${insurer.id === "other" && lead.insurerOtherName ? ` (${lead.insurerOtherName})` : ""}`
                     : "—"
               }
+            />
+            <ReviewRow
+              label="Authorise Wellx"
+              value={lead.authorizeWellxContact ? "Yes — to speak with broker/insurer" : "No"}
             />
             <ReviewRow
               label="Company"
@@ -692,7 +742,11 @@ export function ReviewStep({
             />
             <ReviewRow
               label="Broker"
-              value={lead.brokerName ?? "—"}
+              value={
+                lead.brokerName
+                  ? `${lead.brokerName}${lead.brokerContact ? ` (${lead.brokerContact})` : ""}`
+                  : "—"
+              }
             />
             <ReviewRow
               label="Total people"
@@ -700,7 +754,7 @@ export function ReviewStep({
             />
             <ReviewRow
               label="Employees / Dependants"
-              value={`${lead.employeeCount ?? "—"} / ${lead.dependantCount ?? "—"}`}
+              value={`${employees.toLocaleString()} / ${dependants.toLocaleString()}`}
             />
             <ReviewRow
               label="Add-on modules"
@@ -737,12 +791,7 @@ export function ReviewStep({
               value={lead.contactRole ?? ""}
               onChange={(v) => set({ contactRole: v })}
               placeholder="e.g. Head of People"
-            />
-            <TextField
-              label="Company (if different)"
-              value={lead.companyName ?? ""}
-              onChange={(v) => set({ companyName: v })}
-              placeholder="Your company"
+              className="sm:col-span-2"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -859,6 +908,7 @@ function TextField({
   placeholder,
   type = "text",
   required,
+  className,
 }: {
   label: string;
   value: string;
@@ -866,12 +916,13 @@ function TextField({
   placeholder?: string;
   type?: string;
   required?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>
       <Eyebrow>
         {label}
-        {required ? <span className="text-wx-orange">*</span> : null}
+        {required ? <span className="text-wx-orange ml-0.5">*</span> : null}
       </Eyebrow>
       <input
         type={type}
@@ -884,36 +935,83 @@ function TextField({
   );
 }
 
-function NumberField({
-  label,
-  value,
+function Checkbox({
+  checked,
   onChange,
-  placeholder,
-  icon,
+  label,
 }: {
-  label: string;
-  value?: number;
-  onChange: (v: number | undefined) => void;
-  placeholder?: string;
-  icon?: React.ReactNode;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="flex items-center gap-2 rounded-xl border border-stroke bg-card-elev px-3 py-2.5">
-        {icon}
-        <input
-          type="number"
-          value={value ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange(v === "" ? undefined : Math.max(0, Number(v)));
-          }}
-          placeholder={placeholder}
-          className="wx-focus flex-1 bg-transparent text-[13.5px] text-fg outline-none placeholder:text-fg-muted wx-mono"
-        />
-      </div>
-    </div>
+    <label className="wx-focus flex items-start gap-3 rounded-xl border border-stroke bg-card-elev p-3 cursor-pointer hover:border-wx-purple/40 transition-colors">
+      <span
+        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-all"
+        style={
+          checked
+            ? {
+                background: "var(--wx-gradient-warm)",
+                borderColor: "transparent",
+                boxShadow: "0 4px 12px var(--wx-glow-shadow-warm)",
+              }
+            : { borderColor: "var(--wx-section-stroke)" }
+        }
+      >
+        {checked && (
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            aria-hidden
+          >
+            <path
+              d="M1.5 5.2L4 7.5L8.5 2.5"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only"
+      />
+      <span className="text-[12.5px] leading-relaxed text-fg-secondary">
+        {label}
+      </span>
+    </label>
+  );
+}
+
+function InlineNumber({
+  value,
+  onChange,
+  label,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <input
+        type="number"
+        value={value}
+        min={0}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n) && n >= 0) onChange(n);
+        }}
+        className="wx-focus wx-mono w-[70px] rounded-md border border-stroke bg-card-elev px-1.5 py-0.5 text-[11.5px] text-fg outline-none"
+      />
+      <span>{label}</span>
+    </span>
   );
 }
 
