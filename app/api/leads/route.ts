@@ -87,9 +87,11 @@ export async function POST(request: NextRequest) {
 const ALLOWED_KEYS = new Set([
   "for_who",
   "goals",
+  "country",
   "sourcing",
   "insurer",
   "insurer_other_name",
+  "ksa_broker",
   "broker_name",
   "broker_email",
   "broker_phone",
@@ -101,19 +103,24 @@ const ALLOWED_KEYS = new Set([
   "add_on_modules",
   "contact_name",
   "contact_email",
+  "contact_phone",
   "contact_role",
+  "hr_contact_email",
   "notes",
 ]);
 
 const FOR_WHO = new Set(["self", "team"]);
-const SOURCING = new Set(["insurer", "direct"]);
+const SOURCING = new Set(["insurer", "broker", "direct"]);
+const COUNTRY = new Set(["uae", "ksa", "ph"]);
 const INSURER = new Set(["qic", "liva", "dni", "salama", "adnt", "other"]);
+const KSA_BROKER = new Set(["elite", "marsh", "other"]);
 const GOAL = new Set([
   "know-team",
   "retention",
   "engagement",
   "claims",
   "differentiation",
+  "change-provider",
 ]);
 
 function sanitize(input: Record<string, unknown>) {
@@ -137,10 +144,13 @@ function sanitize(input: Record<string, unknown>) {
 function validate(p: Record<string, unknown>): string | null {
   if (p.for_who && !FOR_WHO.has(p.for_who as string))
     return "Invalid for_who";
+  if (p.country && !COUNTRY.has(p.country as string)) return "Invalid country";
   if (p.sourcing && !SOURCING.has(p.sourcing as string))
     return "Invalid sourcing";
   if (p.insurer && !INSURER.has(p.insurer as string))
     return "Invalid insurer";
+  if (p.ksa_broker && !KSA_BROKER.has(p.ksa_broker as string))
+    return "Invalid ksa_broker";
   if (p.goals !== undefined) {
     if (!Array.isArray(p.goals)) return "Invalid goals (must be an array)";
     for (const g of p.goals) {
@@ -151,22 +161,25 @@ function validate(p: Record<string, unknown>): string | null {
     return "Invalid authorize_wellx_contact (must be boolean)";
   }
 
-  if (p.contact_email && typeof p.contact_email === "string") {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.contact_email))
-      return "Invalid contact email";
+  const emailFields = ["contact_email", "broker_email", "hr_contact_email"] as const;
+  for (const k of emailFields) {
+    const v = p[k];
+    if (v && typeof v === "string") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return `Invalid ${k}`;
+    }
   }
-  if (p.broker_email && typeof p.broker_email === "string") {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.broker_email))
-      return "Invalid broker email";
-  }
-  if (p.broker_phone && typeof p.broker_phone === "string") {
-    const digits = p.broker_phone.replace(/\D/g, "");
-    if (
-      !/^\+?[\d\s\-().]+$/.test(p.broker_phone) ||
-      digits.length < 7 ||
-      digits.length > 15
-    )
-      return "Invalid broker phone";
+  const phoneFields = ["broker_phone", "contact_phone"] as const;
+  for (const k of phoneFields) {
+    const v = p[k];
+    if (v && typeof v === "string") {
+      const digits = v.replace(/\D/g, "");
+      if (
+        !/^\+?[\d\s\-().]+$/.test(v) ||
+        digits.length < 7 ||
+        digits.length > 15
+      )
+        return `Invalid ${k}`;
+    }
   }
   if (p.total_people !== undefined && p.total_people !== null) {
     const n = Number(p.total_people);

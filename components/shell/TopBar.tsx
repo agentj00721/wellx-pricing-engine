@@ -17,9 +17,9 @@ export function TopBar() {
       className="sticky top-0 z-40 border-b border-stroke backdrop-blur-2xl"
       style={{ background: "var(--wx-nav-bg)" }}
     >
-      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-3 px-4 sm:h-16 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4 sm:h-20 sm:px-6 lg:px-8">
         <BrandMark
-          height={device === "phone" ? 22 : 26}
+          height={device === "phone" ? 32 : 40}
           showSub={device !== "phone"}
         />
 

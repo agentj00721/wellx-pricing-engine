@@ -6,6 +6,7 @@ import { useDevice } from "@/components/providers";
 import { Eyebrow, RadialScore, StatPill } from "@/components/ui/atoms";
 import { GradientButton } from "@/components/ui/GradientButton";
 import { DecisionPanel } from "./DecisionPanel";
+import { PricingControls } from "./PricingControls";
 import { RevenueArchitecture } from "./RevenueArchitecture";
 import { SevenLevelMap } from "./SevenLevelMap";
 import { Snapshot, NextDeadline } from "./Snapshot";
@@ -108,6 +109,7 @@ function FoundersTablet() {
         </div>
         <aside className="flex flex-col gap-5 sticky top-20 self-start">
           <NextDeadline />
+          <PricingControls />
           <DecisionPanel />
         </aside>
       </div>
@@ -143,6 +145,7 @@ function FoundersDesktop() {
         </div>
         <aside className="flex flex-col gap-6 sticky top-24 self-start">
           <NextDeadline />
+          <PricingControls />
           <SevenLevelMap />
         </aside>
       </div>

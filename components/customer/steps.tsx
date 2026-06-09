@@ -1,13 +1,18 @@
 "use client";
 
 import { motion } from "motion/react";
+import { useState } from "react";
 import {
   ArrowRight,
   Building2,
+  Check,
   CheckCircle2,
+  Copy,
+  Globe2,
   Heart,
   Info,
   Mail,
+  Repeat,
   ShieldCheck,
   Sparkles,
   User2,
@@ -19,15 +24,28 @@ import { Tag } from "@/components/ui/Panel";
 import { GradientButton } from "@/components/ui/GradientButton";
 import {
   ADD_ON_MODULES,
+  COUNTRIES,
   GOALS,
+  hasBrokerArrangements,
+  hasInsurerArrangements,
   INSURERS,
   isValidEmail,
   isValidPhone,
+  KSA_BROKERS,
+  type Country,
   type CustomerLead,
   type InsurerId,
+  type KsaBrokerId,
   type SourcingMethod,
 } from "./flow";
 import { useDevice } from "@/components/providers";
+import {
+  calcIndicativeMonthly,
+  DEFAULT_PRICING,
+  fmtPrice,
+  priceForAddOn,
+  type PricingConfig,
+} from "@/lib/pricing";
 
 /* ────────────── Welcome (persona) ────────────── */
 
@@ -77,7 +95,6 @@ export function WelcomeStep({
           icon={<Users2 size={18} />}
           title="I want Wellx for my team"
           description="I'm building or refreshing wellbeing for the people I work with."
-          badge="B2B"
         />
       </div>
 
@@ -99,23 +116,102 @@ export function WelcomeStep({
   );
 }
 
-/* ────────────── Self path — terminal ────────────── */
+/* ────────────── Self path — contact capture ────────────── */
+
+export function SelfContactStep({
+  lead,
+  set,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+}) {
+  return (
+    <StepBody
+      eyebrow="About you"
+      title={<>Let&rsquo;s get you on the list.</>}
+      description="A few quick details so we can keep you posted — and help your HR team bring Wellx to your company in the meantime."
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <TextField
+          label="Your name"
+          value={lead.contactName ?? ""}
+          onChange={(v) => set({ contactName: v })}
+          placeholder="First Last"
+          required
+        />
+        <TextField
+          label="Where you work"
+          value={lead.companyName ?? ""}
+          onChange={(v) => set({ companyName: v })}
+          placeholder="Your company"
+          required
+        />
+        <EmailField
+          label="Your email"
+          value={lead.contactEmail ?? ""}
+          onChange={(v) => set({ contactEmail: v })}
+          placeholder="you@example.com"
+          required
+        />
+        <PhoneField
+          label="Your phone (optional)"
+          value={lead.contactPhone ?? ""}
+          onChange={(v) => set({ contactPhone: v })}
+          placeholder="+971 50 123 4567"
+        />
+        <EmailField
+          label="Your HR contact's email (optional)"
+          value={lead.hrContactEmail ?? ""}
+          onChange={(v) => set({ hrContactEmail: v })}
+          placeholder="hr@yourcompany.com"
+        />
+      </div>
+      <p className="text-[12px] text-fg-muted">
+        If you share your HR contact, we&rsquo;ll pre-fill an email you can
+        forward on the next screen.
+      </p>
+    </StepBody>
+  );
+}
+
+/* ────────────── Self path — terminal with mailto + copy ────────────── */
 
 export function SelfEndStep({ lead }: { lead: CustomerLead }) {
-  void lead;
+  const firstName = (lead.contactName ?? "").trim().split(/\s+/)[0] ?? "";
+  const company = lead.companyName?.trim() ?? "our company";
+  const personal = firstName ? `, ${firstName}` : "";
+
+  const templateText = `Hi,
+
+I came across Wellx — it's a wellbeing platform that companies bring in for their teams. There's an app for people, an HR portal for the benefits team, and a behavioural layer that ties it together.
+
+I'd love for us to consider it for ${company}. Could you reach out to them at hello@wellxai.com to explore what it would look like for us?
+
+Thanks${personal}`;
+
+  const subject = `Bringing Wellx to ${company}`;
+  const to = lead.hrContactEmail?.trim() ?? "";
+  const cc = "hello@wellxai.com";
+  const mailtoHref =
+    `mailto:${encodeURIComponent(to)}` +
+    `?cc=${encodeURIComponent(cc)}` +
+    `&subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(templateText)}`;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <Eyebrow accent="warm">Wellx for individuals</Eyebrow>
         <h2 className="wx-display text-3xl sm:text-4xl text-fg leading-[1.05]">
-          We don&rsquo;t sell{" "}
-          <span className="wx-gradient-text-warm">Wellx</span> direct to you
-          &mdash; yet.
+          Thanks{firstName ? `, ${firstName}` : ""} &mdash; you&rsquo;re on
+          our list.
         </h2>
         <p className="text-[14.5px] leading-relaxed text-fg-secondary max-w-xl">
-          Wellx is currently delivered through employers and insurers, not
-          individual subscriptions. The fastest way for you to get it is to
-          point your HR or benefits team to us.
+          We&rsquo;re not selling Wellx to individuals just yet &mdash; right
+          now we work through companies. As soon as Wellx is available for
+          individuals, we&rsquo;ll be in touch. In the meantime, the fastest
+          way to bring Wellx to you is to forward a quick note to your HR
+          team.
         </p>
       </div>
 
@@ -131,35 +227,69 @@ export function SelfEndStep({ lead }: { lead: CustomerLead }) {
             <Mail size={15} className="text-white" />
           </span>
           <div className="flex flex-col gap-1">
-            <Eyebrow>Ask your HR to get in touch</Eyebrow>
+            <Eyebrow>For your HR team</Eyebrow>
             <p className="text-[13.5px] text-fg leading-relaxed">
-              Forward this short note to your HR or People team and we&rsquo;ll
-              take it from there.
+              Send this to your HR or People team
+              {lead.hrContactEmail ? ` (we'll pre-fill ${lead.hrContactEmail})` : ""}
+              .
             </p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-rule bg-card-elev p-4">
-          <p className="text-[13px] text-fg-secondary leading-relaxed">
-            &ldquo;Hi &mdash; I&rsquo;ve been looking at{" "}
-            <span className="text-fg font-medium">Wellx</span> as a wellbeing
-            layer for our team. Could you reach out to them at{" "}
-            <span className="text-fg font-medium wx-mono">
-              hello@wellx.ai
-            </span>{" "}
-            to explore what it would look like for us?&rdquo;
-          </p>
+        <CopyableTemplate text={templateText} />
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <a
+            href={mailtoHref}
+            className="wx-focus inline-flex h-11 items-center gap-2 rounded-full px-5 text-[13.5px] font-medium text-white"
+            style={{
+              background: "var(--wx-gradient-warm)",
+              boxShadow: "0 10px 30px var(--wx-glow-shadow-warm)",
+            }}
+          >
+            <Mail size={14} /> Open in email
+          </a>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap gap-3">
-        <a
-          href="mailto:hello@wellx.ai?subject=Wellx%20for%20our%20team"
-          className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg hover:border-wx-purple/40"
-        >
-          <Mail size={14} /> Email Wellx
-        </a>
-      </div>
+function CopyableTemplate({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="relative rounded-xl border border-rule bg-card-elev p-4">
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label="Copy template"
+        className="wx-focus absolute top-2.5 right-2.5 inline-flex h-7 items-center gap-1 rounded-full border border-stroke bg-card/90 px-2.5 text-[11px] font-medium text-fg-secondary hover:text-fg hover:border-wx-purple/40 transition-colors"
+      >
+        {copied ? (
+          <>
+            <Check size={11} className="text-[color:var(--wx-success)]" />
+            Copied
+          </>
+        ) : (
+          <>
+            <Copy size={11} /> Copy
+          </>
+        )}
+      </button>
+      <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-fg-secondary font-sans m-0 pr-16">
+        {text}
+      </pre>
     </div>
   );
 }
@@ -193,7 +323,15 @@ export function GoalStep({
                     : [...lead.goals, g.id],
                 })
               }
-              icon={g.id === "know-team" ? <Heart size={18} /> : <Sparkles size={18} />}
+              icon={
+                g.id === "know-team" ? (
+                  <Heart size={18} />
+                ) : g.id === "change-provider" ? (
+                  <Repeat size={18} />
+                ) : (
+                  <Sparkles size={18} />
+                )
+              }
               title={g.title}
               description={g.description}
               badge={g.badge}
@@ -206,7 +344,7 @@ export function GoalStep({
   );
 }
 
-/* ────────────── Sourcing (insurer vs direct + insurer picker) ────────────── */
+/* ────────────── Sourcing (country + channel + conditional partners) ────────────── */
 
 export function SourcingStep({
   lead,
@@ -215,150 +353,143 @@ export function SourcingStep({
   lead: CustomerLead;
   set: (p: Partial<CustomerLead>) => void;
 }) {
-  const insurer = lead.insurer
-    ? INSURERS.find((i) => i.id === lead.insurer)
-    : undefined;
-
   return (
     <StepBody
       eyebrow="02 · Sourcing"
       title={<>How would you bring Wellx in?</>}
-      description="Either embed it into your existing insurance with one of our partners, or buy it from us directly."
+      description="Where you are decides what's available. Pick a country first, then pick the channel that fits."
     >
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <ChoiceTile
-            selected={lead.sourcing === "insurer"}
-            onSelect={() =>
-              set({ sourcing: "insurer" as SourcingMethod })
-            }
-            icon={<ShieldCheck size={18} />}
-            title="Through my insurer"
-            description="We have arrangements with several regional insurers — Wellx embeds into your renewal."
-          />
-          <ChoiceTile
-            selected={lead.sourcing === "direct"}
-            onSelect={() => set({ sourcing: "direct" as SourcingMethod })}
-            icon={<Sparkles size={18} />}
-            title="Buy direct from Wellx"
-            description="We work with you straight — no insurer needed in the middle."
-          />
+        {/* Country picker */}
+        <div className="flex flex-col gap-3">
+          <Eyebrow accent="warm">
+            <Globe2 size={11} /> Where are you based?
+          </Eyebrow>
+          <div className="grid grid-cols-3 gap-2">
+            {COUNTRIES.map((c) => {
+              const active = lead.country === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => {
+                    // Reset sourcing-specific selections if the country changes
+                    if (lead.country !== c.id) {
+                      set({
+                        country: c.id as Country,
+                        insurer: undefined,
+                        ksaBroker: undefined,
+                        insurerOtherName: undefined,
+                      });
+                    }
+                  }}
+                  className={`wx-focus rounded-xl border px-3 py-3 text-left transition-colors ${
+                    active
+                      ? "border-transparent text-white"
+                      : "border-stroke bg-card text-fg-secondary hover:text-fg hover:border-wx-purple/40"
+                  }`}
+                  style={
+                    active
+                      ? {
+                          background: "var(--wx-gradient-warm)",
+                          boxShadow: "0 8px 24px var(--wx-glow-shadow-warm)",
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base leading-none">{c.flag}</span>
+                    <span className="text-[12.5px] font-semibold leading-tight">
+                      {c.id === "uae"
+                        ? "UAE"
+                        : c.id === "ksa"
+                          ? "Saudi"
+                          : "Philippines"}
+                    </span>
+                  </div>
+                  <div
+                    className={`text-[10.5px] mt-1 ${
+                      active ? "text-white/80" : "text-fg-muted"
+                    }`}
+                  >
+                    {c.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {lead.sourcing === "insurer" && (
+        {/* Channel picker */}
+        {lead.country && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
+            className="flex flex-col gap-3"
+          >
+            <Eyebrow accent="warm">Which channel?</Eyebrow>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <ChoiceTile
+                selected={lead.sourcing === "insurer"}
+                onSelect={() =>
+                  set({ sourcing: "insurer" as SourcingMethod })
+                }
+                icon={<ShieldCheck size={16} />}
+                title="Through my insurer"
+                description="Embed Wellx alongside your existing health plan."
+              />
+              <ChoiceTile
+                selected={lead.sourcing === "broker"}
+                onSelect={() =>
+                  set({ sourcing: "broker" as SourcingMethod })
+                }
+                icon={<Users2 size={16} />}
+                title="Through a broker"
+                description="Your broker handles plan design — they bring Wellx in."
+              />
+              <ChoiceTile
+                selected={lead.sourcing === "direct"}
+                onSelect={() => set({ sourcing: "direct" as SourcingMethod })}
+                icon={<Sparkles size={16} />}
+                title="Buy direct from Wellx"
+                description="We work with you straight — no one else in the middle."
+              />
+            </div>
+          </motion.div>
+        )}
+
+        {/* Conditional details: insurer channel */}
+        {lead.country && lead.sourcing === "insurer" && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
             className="flex flex-col gap-4"
           >
-            <div className="flex flex-col gap-2">
-              <Eyebrow accent="cool">Which insurer?</Eyebrow>
-              <p className="text-[12.5px] text-fg-muted">
-                Pick yours — or &ldquo;Other&rdquo; if it&rsquo;s not on the
-                list.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {INSURERS.map((i) => {
-                const active = lead.insurer === i.id;
-                return (
-                  <button
-                    key={i.id}
-                    type="button"
-                    onClick={() =>
-                      set({ insurer: i.id as InsurerId })
-                    }
-                    className={`wx-focus rounded-xl border px-3 py-3 text-left transition-colors ${
-                      active
-                        ? "border-transparent text-white"
-                        : "border-stroke bg-card text-fg-secondary hover:text-fg hover:border-wx-purple/40"
-                    }`}
-                    style={
-                      active
-                        ? {
-                            background: "var(--wx-gradient-warm)",
-                            boxShadow:
-                              "0 8px 24px var(--wx-glow-shadow-warm)",
-                          }
-                        : undefined
-                    }
-                  >
-                    <div className="text-[12.5px] font-semibold leading-tight">
-                      {i.short}
-                    </div>
-                    <div
-                      className={`text-[10.5px] mt-0.5 ${
-                        active ? "text-white/80" : "text-fg-muted"
-                      }`}
-                    >
-                      {i.label === i.short ? i.id === "other" ? "Not in the list" : "" : i.label}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Conditional message for arranged insurers */}
-            {insurer && insurer.arranged && (
-              <>
-                <InfoBlock
-                  tone="success"
-                  title={`We're partnered with ${insurer.short}.`}
-                  body={
-                    <>
-                      You can ask your broker to embed Wellx in your
-                      renewal, or click <strong className="text-fg">Next</strong>{" "}
-                      to continue your journey directly with us.
-                    </>
-                  }
-                />
-
-                <BrokerFields lead={lead} set={set} requireAll={false} />
-
-                <Checkbox
-                  checked={!!lead.authorizeWellxContact}
-                  onChange={(v) => set({ authorizeWellxContact: v })}
-                  label={
-                    <>
-                      Please connect with my insurer / broker to see if they
-                      can embed Wellx in our plans &mdash; I authorise Wellx
-                      to speak on our behalf.
-                    </>
-                  }
-                />
-              </>
-            )}
-
-            {/* Other insurer flow */}
-            {insurer?.id === "other" && (
-              <div className="flex flex-col gap-4">
-                <InfoBlock
-                  tone="warning"
-                  title="We don't have an arrangement with them yet."
-                  body={
-                    <>
-                      Share a few details and we&rsquo;ll work with your
-                      broker or insurer to make it happen. Or click{" "}
-                      <strong className="text-fg">Next</strong> to buy
-                      direct.
-                    </>
-                  }
-                />
-                <TextField
-                  label="Insurer name"
-                  value={lead.insurerOtherName ?? ""}
-                  onChange={(v) => set({ insurerOtherName: v })}
-                  placeholder="e.g. Sukoon"
-                  required
-                />
-                <BrokerFields lead={lead} set={set} requireAll />
-              </div>
+            {hasInsurerArrangements(lead.country) ? (
+              <InsurerPicker lead={lead} set={set} />
+            ) : (
+              <FreeEntryInsurer lead={lead} set={set} country={lead.country} />
             )}
           </motion.div>
         )}
 
-        {lead.sourcing === "direct" && (
+        {/* Conditional details: broker channel */}
+        {lead.country && lead.sourcing === "broker" && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-4"
+          >
+            {hasBrokerArrangements(lead.country) ? (
+              <KsaBrokerPicker lead={lead} set={set} />
+            ) : (
+              <FreeEntryBroker lead={lead} set={set} country={lead.country} />
+            )}
+          </motion.div>
+        )}
+
+        {/* Direct: just the standard message */}
+        {lead.country && lead.sourcing === "direct" && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -375,14 +506,283 @@ export function SourcingStep({
   );
 }
 
-/* ────────────── Modules ────────────── */
-
-export function ModulesStep({
+/** UAE insurer picker (QIC, Liva, DNI, Salama, ADNT, Other). */
+function InsurerPicker({
   lead,
   set,
 }: {
   lead: CustomerLead;
   set: (p: Partial<CustomerLead>) => void;
+}) {
+  const insurer = lead.insurer
+    ? INSURERS.find((i) => i.id === lead.insurer)
+    : undefined;
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <Eyebrow accent="cool">Which insurer?</Eyebrow>
+        <p className="text-[12.5px] text-fg-muted">
+          Pick yours &mdash; or &ldquo;Other&rdquo; if it&rsquo;s not on
+          the list.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {INSURERS.map((i) => {
+          const active = lead.insurer === i.id;
+          return (
+            <button
+              key={i.id}
+              type="button"
+              onClick={() => set({ insurer: i.id as InsurerId })}
+              className={`wx-focus rounded-xl border px-3 py-3 text-left transition-colors ${
+                active
+                  ? "border-transparent text-white"
+                  : "border-stroke bg-card text-fg-secondary hover:text-fg hover:border-wx-purple/40"
+              }`}
+              style={
+                active
+                  ? {
+                      background: "var(--wx-gradient-warm)",
+                      boxShadow: "0 8px 24px var(--wx-glow-shadow-warm)",
+                    }
+                  : undefined
+              }
+            >
+              <div className="text-[12.5px] font-semibold leading-tight">
+                {i.short}
+              </div>
+              <div
+                className={`text-[10.5px] mt-0.5 ${
+                  active ? "text-white/80" : "text-fg-muted"
+                }`}
+              >
+                {i.label === i.short
+                  ? i.id === "other"
+                    ? "Not in the list"
+                    : ""
+                  : i.label}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {insurer && insurer.arranged && (
+        <>
+          <InfoBlock
+            tone="success"
+            title={`We're partnered with ${insurer.short}.`}
+            body={
+              <>
+                You can ask your broker to embed Wellx in your renewal, or
+                click <strong className="text-fg">Next</strong> to continue
+                your journey directly with us.
+              </>
+            }
+          />
+          <BrokerFields lead={lead} set={set} requireAll={false} />
+          <Checkbox
+            checked={!!lead.authorizeWellxContact}
+            onChange={(v) => set({ authorizeWellxContact: v })}
+            label={
+              <>
+                Please connect with my insurer / broker to see if they can
+                embed Wellx in our plans &mdash; I authorise Wellx to speak
+                on our behalf.
+              </>
+            }
+          />
+        </>
+      )}
+
+      {insurer?.id === "other" && (
+        <>
+          <InfoBlock
+            tone="warning"
+            title="We don't have an arrangement with them yet."
+            body={
+              <>
+                Share a few details and we&rsquo;ll work with your broker
+                or insurer to make it happen. Or click{" "}
+                <strong className="text-fg">Next</strong> to buy direct.
+              </>
+            }
+          />
+          <TextField
+            label="Insurer name"
+            value={lead.insurerOtherName ?? ""}
+            onChange={(v) => set({ insurerOtherName: v })}
+            placeholder="e.g. Sukoon"
+            required
+          />
+          <BrokerFields lead={lead} set={set} requireAll />
+        </>
+      )}
+    </>
+  );
+}
+
+/** Insurer channel, country without a partner network. */
+function FreeEntryInsurer({
+  lead,
+  set,
+  country,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+  country: Country;
+}) {
+  const label = country === "ksa" ? "Saudi Arabia" : "the Philippines";
+  return (
+    <>
+      <InfoBlock
+        tone="warning"
+        title={`We don't have insurer arrangements in ${label} yet.`}
+        body="Share their details and we'll work with them to see if we can embed Wellx."
+      />
+      <TextField
+        label="Insurer name"
+        value={lead.insurerOtherName ?? ""}
+        onChange={(v) => set({ insurerOtherName: v })}
+        placeholder="Your insurer"
+        required
+      />
+      <BrokerFields lead={lead} set={set} requireAll={false} />
+    </>
+  );
+}
+
+/** KSA broker picker (Elite, Marsh, Other). */
+function KsaBrokerPicker({
+  lead,
+  set,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+}) {
+  const broker = lead.ksaBroker
+    ? KSA_BROKERS.find((b) => b.id === lead.ksaBroker)
+    : undefined;
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <Eyebrow accent="cool">Which broker?</Eyebrow>
+        <p className="text-[12.5px] text-fg-muted">
+          Pick yours &mdash; or &ldquo;Other&rdquo; if it&rsquo;s not on
+          the list.
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {KSA_BROKERS.map((b) => {
+          const active = lead.ksaBroker === b.id;
+          return (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => set({ ksaBroker: b.id as KsaBrokerId })}
+              className={`wx-focus rounded-xl border px-3 py-3 text-left transition-colors ${
+                active
+                  ? "border-transparent text-white"
+                  : "border-stroke bg-card text-fg-secondary hover:text-fg hover:border-wx-purple/40"
+              }`}
+              style={
+                active
+                  ? {
+                      background: "var(--wx-gradient-warm)",
+                      boxShadow: "0 8px 24px var(--wx-glow-shadow-warm)",
+                    }
+                  : undefined
+              }
+            >
+              <div className="text-[12.5px] font-semibold leading-tight">
+                {b.short}
+              </div>
+              <div
+                className={`text-[10.5px] mt-0.5 ${
+                  active ? "text-white/80" : "text-fg-muted"
+                }`}
+              >
+                {b.id === "other" ? "Not in the list" : ""}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {broker?.arranged && (
+        <>
+          <InfoBlock
+            tone="success"
+            title={`We're partnered with ${broker.short} in Saudi.`}
+            body={
+              <>
+                Ask {broker.short} to embed Wellx in your plan &mdash; or
+                click <strong className="text-fg">Next</strong> to continue
+                directly with us. Share your specific contact at{" "}
+                {broker.short} so we know who to talk to.
+              </>
+            }
+          />
+          <BrokerFields lead={lead} set={set} requireAll />
+          <Checkbox
+            checked={!!lead.authorizeWellxContact}
+            onChange={(v) => set({ authorizeWellxContact: v })}
+            label={
+              <>
+                Please connect with my broker to see if they can embed
+                Wellx in our plans &mdash; I authorise Wellx to speak on
+                our behalf.
+              </>
+            }
+          />
+        </>
+      )}
+      {broker?.id === "other" && (
+        <>
+          <InfoBlock
+            tone="warning"
+            title="We don't have an arrangement with them yet."
+            body="Share their details and we'll see if we can embed Wellx via your broker."
+          />
+          <BrokerFields lead={lead} set={set} requireAll />
+        </>
+      )}
+    </>
+  );
+}
+
+/** Broker channel, country without a partner network. */
+function FreeEntryBroker({
+  lead,
+  set,
+  country,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+  country: Country;
+}) {
+  const label = country === "uae" ? "the UAE" : "the Philippines";
+  return (
+    <>
+      <InfoBlock
+        tone="warning"
+        title={`We don't have broker arrangements in ${label} yet.`}
+        body="Share your broker's details and we'll see if we can embed Wellx via them."
+      />
+      <BrokerFields lead={lead} set={set} requireAll />
+    </>
+  );
+}
+
+/* ────────────── Modules ────────────── */
+
+export function ModulesStep({
+  lead,
+  set,
+  pricing = DEFAULT_PRICING,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+  pricing?: PricingConfig;
 }) {
   const toggle = (id: string) => {
     const has = lead.addOnModules.includes(id);
@@ -393,13 +793,22 @@ export function ModulesStep({
     });
   };
 
+  const indicative = calcIndicativeMonthly(
+    lead.totalPeople,
+    lead.addOnModules,
+    pricing,
+  );
+  const billing =
+    pricing.billingPeriod === "annual" ? "billed annually" : "billed monthly";
+
   return (
     <StepBody
-      eyebrow="03 · Wellx for business"
-      title={<>The standard stack &mdash; plus anything else?</>}
-      description="Every Wellx for Business engagement comes with our standard offering. Pick any add-on modules you want on top — multi-select."
+      eyebrow="03 · Wellx Core + add-ons"
+      title={<>Your Wellx.</>}
+      description={`Every engagement starts with Wellx Core. Add anything else you want on top — prices are ${billing}.`}
     >
       <div className="flex flex-col gap-6">
+        {/* Wellx Core — always included */}
         <div
           className="wx-card-quiet p-4 flex items-start gap-3"
           style={{
@@ -415,40 +824,54 @@ export function ModulesStep({
               boxShadow: "0 4px 18px var(--wx-glow-shadow-warm)",
             }}
           >
-            <Sparkles size={15} className="text-white" />
+            <Check size={16} strokeWidth={3} className="text-white" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[14px] font-semibold text-fg">
-                Standard Wellx for Business
+                Wellx Core
               </span>
               <Tag tone="warm">Included</Tag>
+              <span className="wx-mono text-[12px] text-fg-secondary">
+                {fmtPrice(pricing.corePmpm, pricing)} per member / month
+              </span>
             </div>
             <p className="mt-1 text-[12.5px] text-fg-secondary leading-relaxed">
-              The full Wellx wellbeing app, behavioural engine, and the
-              insights layer your HR team needs &mdash; included with every
-              business engagement.
+              The Wellx app for your people, the HR portal for your benefits
+              team, and the behavioural engine that ties them together.
             </p>
           </div>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-3">
-            <Eyebrow accent="warm">Add-on modules</Eyebrow>
+            <Eyebrow accent="warm">Add-ons</Eyebrow>
             <span className="text-[11px] text-fg-muted">
-              {lead.addOnModules.length} selected
+              {lead.addOnModules.filter((id) =>
+                ADD_ON_MODULES.find((m) => m.id === id && m.available),
+              ).length}{" "}
+              selected
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {ADD_ON_MODULES.filter((m) => m.available).map((m) => (
-              <ChoiceTile
-                key={m.id}
-                selected={lead.addOnModules.includes(m.id)}
-                onSelect={() => toggle(m.id)}
-                title={m.label}
-                description={m.description}
-              />
-            ))}
+            {ADD_ON_MODULES.filter((m) => m.available).map((m) => {
+              const price = priceForAddOn(m.id, pricing);
+              const priceLabel = price
+                ? price.kind === "pmpm"
+                  ? `+${fmtPrice(price.amount, pricing)} per member / mo`
+                  : `+${fmtPrice(price.amount, pricing)} one-time`
+                : undefined;
+              return (
+                <ChoiceTile
+                  key={m.id}
+                  selected={lead.addOnModules.includes(m.id)}
+                  onSelect={() => toggle(m.id)}
+                  title={m.label}
+                  description={m.description}
+                  hint={priceLabel}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -467,6 +890,29 @@ export function ModulesStep({
                 onToggle={() => toggle(m.id)}
               />
             ))}
+          </div>
+        </div>
+
+        {/* Indicative cost — the customer's intuition check */}
+        <div className="wx-card-quiet p-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <Eyebrow accent="warm">Indicative cost</Eyebrow>
+            <span className="text-[10.5px] text-fg-muted">
+              {billing} · the Wellx team will confirm
+            </span>
+          </div>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="wx-display wx-mono text-2xl text-fg">
+              {fmtPrice(indicative.monthlyPmpm, pricing)}
+              <span className="text-[12px] text-fg-muted font-medium ml-1">
+                per member / month
+              </span>
+            </span>
+            {indicative.oneTime > 0 && (
+              <span className="wx-mono text-[13px] text-fg-secondary">
+                + {fmtPrice(indicative.oneTime, pricing)} one-time
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -632,6 +1078,37 @@ export function PeopleStep({
 
 /* ────────────── Review ────────────── */
 
+function sourcingLabel(lead: CustomerLead): string {
+  if (!lead.sourcing) return "—";
+  if (lead.sourcing === "direct") return "Buy direct from Wellx";
+  if (lead.sourcing === "insurer") {
+    if (hasInsurerArrangements(lead.country)) {
+      const ins = lead.insurer
+        ? INSURERS.find((i) => i.id === lead.insurer)
+        : null;
+      if (!ins) return "Through an insurer";
+      if (ins.id === "other" && lead.insurerOtherName) {
+        return `Through ${lead.insurerOtherName}`;
+      }
+      return `Through ${ins.short}`;
+    }
+    return lead.insurerOtherName
+      ? `Through ${lead.insurerOtherName}`
+      : "Through an insurer";
+  }
+  // broker
+  if (hasBrokerArrangements(lead.country)) {
+    const b = lead.ksaBroker
+      ? KSA_BROKERS.find((x) => x.id === lead.ksaBroker)
+      : null;
+    if (b?.id === "other" && lead.brokerName) return `Through ${lead.brokerName}`;
+    if (b) return `Through ${b.short}`;
+  }
+  return lead.brokerName
+    ? `Through ${lead.brokerName}`
+    : "Through a broker";
+}
+
 export function ReviewStep({
   lead,
   set,
@@ -640,9 +1117,6 @@ export function ReviewStep({
   set: (p: Partial<CustomerLead>) => void;
 }) {
   const selectedGoals = GOALS.filter((g) => lead.goals.includes(g.id));
-  const insurer = lead.insurer
-    ? INSURERS.find((i) => i.id === lead.insurer)
-    : null;
   const half = Math.round(lead.totalPeople / 2);
   const employees = lead.employeeCount ?? half;
   const dependants = lead.dependantCount ?? lead.totalPeople - employees;
@@ -666,15 +1140,14 @@ export function ReviewStep({
               wide
             />
             <ReviewRow
-              label="Sourcing"
+              label="Country"
               value={
-                lead.sourcing === "direct"
-                  ? "Buy direct from Wellx"
-                  : insurer
-                    ? `Through ${insurer.short}${insurer.id === "other" && lead.insurerOtherName ? ` (${lead.insurerOtherName})` : ""}`
-                    : "—"
+                lead.country
+                  ? COUNTRIES.find((c) => c.id === lead.country)?.label ?? "—"
+                  : "—"
               }
             />
+            <ReviewRow label="Sourcing" value={sourcingLabel(lead)} />
             <ReviewRow
               label="Authorise Wellx"
               value={lead.authorizeWellxContact ? "Yes — to speak with broker/insurer" : "No"}

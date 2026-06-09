@@ -1,8 +1,9 @@
 /**
- * Customer flow — B2B lead capture.
+ * Customer flow — lead capture.
  *
- * The customer doesn't see pricing. They tell us about their team and what
- * they need, and the Wellx team picks it up to apply pricing from the grid.
+ * The customer sees indicative pricing (Wellx Core + add-ons). They tell
+ * us about their team, and the Wellx team picks it up to apply the actual
+ * price (including any discounts) before sending a proposal.
  */
 
 export type ForWho = "self" | "team";
@@ -12,20 +13,27 @@ export type BusinessGoal =
   | "retention"
   | "engagement"
   | "claims"
-  | "differentiation";
+  | "differentiation"
+  | "change-provider";
 
-export type SourcingMethod = "insurer" | "direct";
+export type SourcingMethod = "insurer" | "broker" | "direct";
+
+export type Country = "uae" | "ksa" | "ph";
 
 export type InsurerId = "qic" | "liva" | "dni" | "salama" | "adnt" | "other";
+
+export type KsaBrokerId = "elite" | "marsh" | "other";
 
 export type CustomerLead = {
   forWho?: ForWho;
 
-  // team path
+  // shared
   goals: BusinessGoal[];
+  country?: Country;
   sourcing?: SourcingMethod;
   insurer?: InsurerId;
   insurerOtherName?: string;
+  ksaBroker?: KsaBrokerId;
   brokerName?: string;
   brokerEmail?: string;
   brokerPhone?: string;
@@ -36,10 +44,13 @@ export type CustomerLead = {
   dependantCount?: number;
   addOnModules: string[];
 
-  // contact (collected at review)
+  // contact (collected at review for team path; on self path it's collected
+  // upfront on the self-contact step)
   contactName?: string;
   contactEmail?: string;
+  contactPhone?: string;
   contactRole?: string;
+  hrContactEmail?: string;
   notes?: string;
 };
 
@@ -103,9 +114,52 @@ export const GOALS: GoalOption[] = [
     badge: "Brand",
     accent: "cool",
   },
+  {
+    id: "change-provider",
+    title: "Change provider",
+    description:
+      "I already have a wellbeing platform — I'm looking for a better one.",
+    badge: "Switch",
+    accent: "cool",
+  },
 ];
 
-/* ────────────── Insurer options ────────────── */
+/* ────────────── Country + sourcing arrangements ────────────── */
+
+export const COUNTRIES: { id: Country; label: string; flag: string }[] = [
+  { id: "uae", label: "United Arab Emirates", flag: "🇦🇪" },
+  { id: "ksa", label: "Saudi Arabia", flag: "🇸🇦" },
+  { id: "ph", label: "Philippines", flag: "🇵🇭" },
+];
+
+export const KSA_BROKERS: {
+  id: KsaBrokerId;
+  label: string;
+  short: string;
+  arranged: boolean;
+}[] = [
+  { id: "elite", label: "Elite", short: "Elite", arranged: true },
+  { id: "marsh", label: "Marsh", short: "Marsh", arranged: true },
+  { id: "other", label: "Other", short: "Other", arranged: false },
+];
+
+/**
+ * Returns true if we have an arrangement with insurer-channel partners in
+ * the given country. Today only the UAE has insurer arrangements.
+ */
+export function hasInsurerArrangements(country: Country | undefined): boolean {
+  return country === "uae";
+}
+
+/**
+ * Returns true if we have an arrangement with broker-channel partners in
+ * the given country. Today only KSA has broker arrangements.
+ */
+export function hasBrokerArrangements(country: Country | undefined): boolean {
+  return country === "ksa";
+}
+
+/* ────────────── Insurer options (UAE only) ────────────── */
 
 export const INSURERS: {
   id: InsurerId;
@@ -184,6 +238,7 @@ export const ADD_ON_MODULES: AddOnModule[] = [
 
 export type StepId =
   | "welcome"
+  | "self-contact"
   | "self-end"
   | "goal"
   | "sourcing"
@@ -204,8 +259,9 @@ export function getSteps(lead: CustomerLead): StepDescriptor[] {
   }
   if (lead.forWho === "self") {
     return [
-      { id: "welcome", label: "Start" },
-      { id: "self-end", label: "About Wellx for individuals" },
+      { id: "welcome", label: "Start", description: "Tell us who this is for" },
+      { id: "self-contact", label: "About you", description: "Your details" },
+      { id: "self-end", label: "Next steps", description: "Get your HR involved" },
     ];
   }
   return [
@@ -228,31 +284,76 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
   switch (stepId) {
     case "welcome":
       return !!lead.forWho;
+    case "self-contact":
+      return (
+        !!lead.contactName?.trim() &&
+        !!lead.companyName?.trim() &&
+        isValidEmail(lead.contactEmail) &&
+        (!lead.contactPhone || isValidPhone(lead.contactPhone)) &&
+        (!lead.hrContactEmail || isValidEmail(lead.hrContactEmail))
+      );
     case "self-end":
       return false; // terminal
     case "goal":
       return lead.goals.length > 0;
     case "sourcing": {
+      if (!lead.country) return false;
       if (!lead.sourcing) return false;
       if (lead.sourcing === "direct") return true;
-      // insurer path requires picking one
-      if (!lead.insurer) return false;
-      if (lead.insurer === "other") {
+
+      const optionalEmailOk = !lead.brokerEmail || isValidEmail(lead.brokerEmail);
+      const optionalPhoneOk = !lead.brokerPhone || isValidPhone(lead.brokerPhone);
+
+      if (lead.sourcing === "insurer") {
+        if (hasInsurerArrangements(lead.country)) {
+          if (!lead.insurer) return false;
+          if (lead.insurer === "other") {
+            return (
+              !!lead.insurerOtherName?.trim() &&
+              !!lead.brokerName?.trim() &&
+              isValidEmail(lead.brokerEmail) &&
+              isValidPhone(lead.brokerPhone)
+            );
+          }
+          // Listed insurer: broker fields optional, but well-formed if typed
+          return optionalEmailOk && optionalPhoneOk;
+        }
+        // No insurer arrangements in this country — free entry of insurer name
         return (
           !!lead.insurerOtherName?.trim() &&
+          optionalEmailOk &&
+          optionalPhoneOk
+        );
+      }
+
+      if (lead.sourcing === "broker") {
+        if (hasBrokerArrangements(lead.country)) {
+          if (!lead.ksaBroker) return false;
+          if (lead.ksaBroker === "other") {
+            return (
+              !!lead.brokerName?.trim() &&
+              isValidEmail(lead.brokerEmail) &&
+              isValidPhone(lead.brokerPhone)
+            );
+          }
+          // Listed broker: still want their specific rep's contact details
+          return (
+            !!lead.brokerName?.trim() &&
+            isValidEmail(lead.brokerEmail) &&
+            isValidPhone(lead.brokerPhone)
+          );
+        }
+        // No broker arrangements in this country — full broker details
+        return (
           !!lead.brokerName?.trim() &&
           isValidEmail(lead.brokerEmail) &&
           isValidPhone(lead.brokerPhone)
         );
       }
-      // Listed insurer: broker details optional, but if any email/phone is
-      // provided it must be well-formed.
-      if (lead.brokerEmail && !isValidEmail(lead.brokerEmail)) return false;
-      if (lead.brokerPhone && !isValidPhone(lead.brokerPhone)) return false;
-      return true;
+      return false;
     }
     case "modules":
-      return true; // modules are optional
+      return true; // add-ons are optional
     case "people":
       return (
         (lead.totalPeople ?? 0) >= 10 &&
@@ -262,7 +363,8 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
       return (
         !!lead.contactName?.trim() &&
         !!lead.companyName?.trim() &&
-        isValidEmail(lead.contactEmail)
+        isValidEmail(lead.contactEmail) &&
+        (!lead.contactPhone || isValidPhone(lead.contactPhone))
       );
     default:
       return false;
@@ -289,9 +391,11 @@ export function leadToPayload(lead: CustomerLead) {
   return {
     for_who: lead.forWho ?? null,
     goals: lead.goals,
+    country: lead.country ?? null,
     sourcing: lead.sourcing ?? null,
     insurer: lead.insurer ?? null,
     insurer_other_name: lead.insurerOtherName ?? null,
+    ksa_broker: lead.ksaBroker ?? null,
     broker_name: lead.brokerName ?? null,
     broker_email: lead.brokerEmail ?? null,
     broker_phone: lead.brokerPhone ?? null,
@@ -303,7 +407,9 @@ export function leadToPayload(lead: CustomerLead) {
     add_on_modules: lead.addOnModules,
     contact_name: lead.contactName ?? null,
     contact_email: lead.contactEmail ?? null,
+    contact_phone: lead.contactPhone ?? null,
     contact_role: lead.contactRole ?? null,
+    hr_contact_email: lead.hrContactEmail ?? null,
     notes: lead.notes ?? null,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Send } from "lucide-react";
 import { useDevice } from "@/components/providers";
@@ -22,11 +22,13 @@ import {
   ModulesStep,
   PeopleStep,
   ReviewStep,
+  SelfContactStep,
   SelfEndStep,
   SourcingStep,
   SubmittedView,
   WelcomeStep,
 } from "./steps";
+import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
 type SubmitState =
   | { phase: "idle" }
@@ -39,6 +41,21 @@ export function CustomerExperience() {
   const [stepIndex, setStepIndex] = useState(0);
   const [lead, setLead] = useState<CustomerLead>(initialLead);
   const [submit, setSubmit] = useState<SubmitState>({ phase: "idle" });
+  const [pricing, setPricing] = useState<PricingConfig>(DEFAULT_PRICING);
+
+  // Fetch the live pricing config on mount. Falls back to defaults silently.
+  useEffect(() => {
+    const ac = new AbortController();
+    fetch("/api/pricing", { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.config) setPricing(data.config as PricingConfig);
+      })
+      .catch(() => {
+        // keep defaults
+      });
+    return () => ac.abort();
+  }, []);
 
   const steps = useMemo(() => getSteps(lead), [lead]);
   const safeIndex = Math.min(stepIndex, steps.length - 1);
@@ -60,31 +77,46 @@ export function CustomerExperience() {
 
   const prev = useCallback(() => setStepIndex((i) => Math.max(i - 1, 0)), []);
 
-  const onSubmit = useCallback(async () => {
-    setSubmit({ phase: "submitting" });
-    try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(leadToPayload(lead)),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        id?: string;
-        error?: string;
-      };
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error ?? `Submission failed (${res.status})`);
+  /**
+   * Send the lead to /api/leads. By default this transitions submit state
+   * to "submitted" and the UI moves to the SubmittedView. When `advanceOnly`
+   * is true (used on the self-contact step) we silently post the lead then
+   * advance to the next step instead of replacing the UI — that way the
+   * self path still flows into the SelfEnd terminal screen.
+   */
+  const onSubmit = useCallback(
+    async (opts: { advanceOnly?: boolean } = {}) => {
+      setSubmit({ phase: "submitting" });
+      try {
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(leadToPayload(lead)),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          id?: string;
+          error?: string;
+        };
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error ?? `Submission failed (${res.status})`);
+        }
+        if (opts.advanceOnly) {
+          setSubmit({ phase: "idle" });
+          setStepIndex((i) => Math.min(i + 1, steps.length - 1));
+        } else {
+          setSubmit({ phase: "submitted", id: data.id });
+        }
+      } catch (err) {
+        setSubmit({
+          phase: "error",
+          message:
+            err instanceof Error ? err.message : "Something went wrong.",
+        });
       }
-      setSubmit({ phase: "submitted", id: data.id });
-    } catch (err) {
-      setSubmit({
-        phase: "error",
-        message:
-          err instanceof Error ? err.message : "Something went wrong.",
-      });
-    }
-  }, [lead]);
+    },
+    [lead, steps.length],
+  );
 
   const reset = useCallback(() => {
     setLead(initialLead);
@@ -100,6 +132,8 @@ export function CustomerExperience() {
     switch (currentStep?.id) {
       case "welcome":
         return <WelcomeStep lead={lead} set={set} onNext={next} />;
+      case "self-contact":
+        return <SelfContactStep lead={lead} set={set} />;
       case "self-end":
         return <SelfEndStep lead={lead} />;
       case "goal":
@@ -107,7 +141,7 @@ export function CustomerExperience() {
       case "sourcing":
         return <SourcingStep lead={lead} set={set} />;
       case "modules":
-        return <ModulesStep lead={lead} set={set} />;
+        return <ModulesStep lead={lead} set={set} pricing={pricing} />;
       case "people":
         return <PeopleStep lead={lead} set={set} />;
       case "review":
@@ -115,7 +149,7 @@ export function CustomerExperience() {
       default:
         return null;
     }
-  }, [currentStep, lead, set, next, reset, submit.phase]);
+  }, [currentStep, lead, set, next, reset, submit.phase, pricing]);
 
   const layoutProps: LayoutProps = {
     steps,
@@ -146,7 +180,7 @@ type LayoutProps = {
   goTo: (i: number) => void;
   stepContent: React.ReactNode;
   submit: SubmitState;
-  onSubmit: () => void;
+  onSubmit: (opts?: { advanceOnly?: boolean }) => void;
   onReset: () => void;
 };
 
@@ -169,9 +203,10 @@ function ActionBar({
   next: () => void;
   prev: () => void;
   submit: SubmitState;
-  onSubmit: () => void;
+  onSubmit: (opts?: { advanceOnly?: boolean }) => void;
 }) {
   const isReview = currentStep === "review";
+  const isSelfContact = currentStep === "self-contact";
   const isWelcome = currentStep === "welcome";
   const isSelfEnd = currentStep === "self-end";
   const isLast = stepIndex >= steps.length - 1;
@@ -204,7 +239,7 @@ function ActionBar({
       {isReview ? (
         <GradientButton
           size="md"
-          onClick={onSubmit}
+          onClick={() => onSubmit()}
           disabled={!canGo || submit.phase === "submitting"}
           iconRight={<Send size={14} />}
         >
@@ -213,6 +248,15 @@ function ActionBar({
             : submit.phase === "error"
               ? "Retry"
               : "Request quote"}
+        </GradientButton>
+      ) : isSelfContact ? (
+        <GradientButton
+          size="md"
+          onClick={() => onSubmit({ advanceOnly: true })}
+          disabled={!canGo || submit.phase === "submitting"}
+          iconRight={<ArrowRight size={14} />}
+        >
+          {submit.phase === "submitting" ? "Saving…" : "Continue"}
         </GradientButton>
       ) : (
         <GradientButton
@@ -264,7 +308,7 @@ function CustomerPhone({
   return (
     <div className="flex flex-col pb-24">
       {!isWelcome && submit.phase !== "submitted" && (
-        <div className="sticky top-14 z-30 bg-page/80 backdrop-blur-xl border-b border-stroke px-4 py-3">
+        <div className="sticky top-16 z-30 bg-page/80 backdrop-blur-xl border-b border-stroke px-4 py-3">
           <HorizontalStepper
             steps={steps.map((s) => ({ id: s.id, label: s.label }))}
             current={stepIndex}
