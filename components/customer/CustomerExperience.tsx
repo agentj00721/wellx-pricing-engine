@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Send } from "lucide-react";
 import { useDevice } from "@/components/providers";
 import { GradientButton } from "@/components/ui/GradientButton";
 import {
@@ -10,102 +10,271 @@ import {
   VerticalStepper,
 } from "@/components/ui/Stepper";
 import {
-  calcQuote,
-  initialState,
-  STEPS,
-  type CustomerState,
+  canAdvance,
+  getSteps,
+  initialLead,
+  leadToPayload,
+  type CustomerLead,
+  type StepId,
 } from "./flow";
-import { LiveStack } from "./LiveStack";
 import {
-  ExperienceStep,
   GoalStep,
-  ModelStep,
   ModulesStep,
-  PersonaStep,
-  PopulationStep,
-  QuoteStep,
+  PeopleStep,
+  ReviewStep,
+  SelfEndStep,
+  SourcingStep,
+  SubmittedView,
   WelcomeStep,
 } from "./steps";
 
+type SubmitState =
+  | { phase: "idle" }
+  | { phase: "submitting" }
+  | { phase: "submitted"; id?: string }
+  | { phase: "error"; message: string };
+
 export function CustomerExperience() {
   const { device } = useDevice();
-  const [step, setStep] = useState(0);
-  const [state, setState] = useState<CustomerState>(initialState);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [lead, setLead] = useState<CustomerLead>(initialLead);
+  const [submit, setSubmit] = useState<SubmitState>({ phase: "idle" });
+
+  const steps = useMemo(() => getSteps(lead), [lead]);
+  const safeIndex = Math.min(stepIndex, steps.length - 1);
+  const currentStep = steps[safeIndex];
 
   const set = useCallback(
-    (p: Partial<CustomerState>) => setState((s) => ({ ...s, ...p })),
+    (p: Partial<CustomerLead>) => setLead((l) => ({ ...l, ...p })),
     [],
   );
 
-  const next = useCallback(
-    () => setStep((s) => Math.min(STEPS.length - 1, s + 1)),
-    [],
+  const goTo = useCallback(
+    (i: number) => setStepIndex(Math.max(0, Math.min(i, steps.length - 1))),
+    [steps.length],
   );
-  const prev = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
 
+  const next = useCallback(() => {
+    setStepIndex((i) => Math.min(i + 1, steps.length - 1));
+  }, [steps.length]);
+
+  const prev = useCallback(() => setStepIndex((i) => Math.max(i - 1, 0)), []);
+
+  const onSubmit = useCallback(async () => {
+    setSubmit({ phase: "submitting" });
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(leadToPayload(lead)),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        id?: string;
+        error?: string;
+      };
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error ?? `Submission failed (${res.status})`);
+      }
+      setSubmit({ phase: "submitted", id: data.id });
+    } catch (err) {
+      setSubmit({
+        phase: "error",
+        message:
+          err instanceof Error ? err.message : "Something went wrong.",
+      });
+    }
+  }, [lead]);
+
+  const reset = useCallback(() => {
+    setLead(initialLead);
+    setStepIndex(0);
+    setSubmit({ phase: "idle" });
+  }, []);
+
+  // Build the step content
   const stepContent = useMemo(() => {
-    const id = STEPS[step].id;
-    switch (id) {
+    if (submit.phase === "submitted") {
+      return <SubmittedView onReset={reset} />;
+    }
+    switch (currentStep?.id) {
       case "welcome":
-        return <WelcomeStep onStart={next} />;
-      case "persona":
-        return <PersonaStep state={state} set={set} />;
+        return <WelcomeStep lead={lead} set={set} onNext={next} />;
+      case "self-end":
+        return <SelfEndStep lead={lead} />;
       case "goal":
-        return <GoalStep state={state} set={set} />;
-      case "model":
-        return <ModelStep state={state} set={set} />;
-      case "population":
-        return <PopulationStep state={state} set={set} />;
-      case "experience":
-        return <ExperienceStep state={state} set={set} />;
+        return <GoalStep lead={lead} set={set} />;
+      case "sourcing":
+        return <SourcingStep lead={lead} set={set} />;
       case "modules":
-        return <ModulesStep state={state} set={set} />;
-      case "quote":
-        return <QuoteStep state={state} />;
+        return <ModulesStep lead={lead} set={set} />;
+      case "people":
+        return <PeopleStep lead={lead} set={set} />;
+      case "review":
+        return <ReviewStep lead={lead} set={set} />;
       default:
         return null;
     }
-  }, [step, state, set, next]);
+  }, [currentStep, lead, set, next, reset, submit.phase]);
 
-  const props = {
-    step,
-    setStep,
+  const layoutProps: LayoutProps = {
+    steps,
+    stepIndex: safeIndex,
+    currentStep: currentStep?.id,
+    lead,
     next,
     prev,
-    state,
+    goTo,
     stepContent,
+    submit,
+    onSubmit,
+    onReset: reset,
   };
 
-  if (device === "phone") return <CustomerPhone {...props} />;
-  if (device === "tablet") return <CustomerTablet {...props} />;
-  return <CustomerDesktop {...props} />;
+  if (device === "phone") return <CustomerPhone {...layoutProps} />;
+  if (device === "tablet") return <CustomerTablet {...layoutProps} />;
+  return <CustomerDesktop {...layoutProps} />;
 }
 
 type LayoutProps = {
-  step: number;
-  setStep: (i: number) => void;
+  steps: ReturnType<typeof getSteps>;
+  stepIndex: number;
+  currentStep: StepId | undefined;
+  lead: CustomerLead;
   next: () => void;
   prev: () => void;
-  state: CustomerState;
+  goTo: (i: number) => void;
   stepContent: React.ReactNode;
+  submit: SubmitState;
+  onSubmit: () => void;
+  onReset: () => void;
 };
+
+/* ────────────── Helpers ────────────── */
+
+function ActionBar({
+  steps,
+  stepIndex,
+  currentStep,
+  lead,
+  next,
+  prev,
+  submit,
+  onSubmit,
+}: {
+  steps: LayoutProps["steps"];
+  stepIndex: number;
+  currentStep: StepId | undefined;
+  lead: CustomerLead;
+  next: () => void;
+  prev: () => void;
+  submit: SubmitState;
+  onSubmit: () => void;
+}) {
+  const isReview = currentStep === "review";
+  const isWelcome = currentStep === "welcome";
+  const isSelfEnd = currentStep === "self-end";
+  const isLast = stepIndex >= steps.length - 1;
+  const canGo = currentStep ? canAdvance(currentStep, lead) : false;
+
+  // self-end has only a back button
+  if (isSelfEnd) {
+    return (
+      <button
+        type="button"
+        onClick={prev}
+        className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg"
+      >
+        <ArrowLeft size={13} /> Back
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 w-full">
+      <button
+        type="button"
+        onClick={prev}
+        disabled={isWelcome}
+        className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg disabled:opacity-40 disabled:pointer-events-none"
+      >
+        <ArrowLeft size={13} /> Back
+      </button>
+
+      {isReview ? (
+        <GradientButton
+          size="md"
+          onClick={onSubmit}
+          disabled={!canGo || submit.phase === "submitting"}
+          iconRight={<Send size={14} />}
+        >
+          {submit.phase === "submitting"
+            ? "Sending…"
+            : submit.phase === "error"
+              ? "Retry"
+              : "Request quote"}
+        </GradientButton>
+      ) : (
+        <GradientButton
+          size="md"
+          onClick={next}
+          disabled={!canGo || isLast}
+          iconRight={<ArrowRight size={14} />}
+        >
+          Continue
+        </GradientButton>
+      )}
+    </div>
+  );
+}
+
+function ErrorBanner({ submit }: { submit: SubmitState }) {
+  if (submit.phase !== "error") return null;
+  return (
+    <div
+      className="rounded-xl border px-3 py-2 text-[12.5px]"
+      style={{
+        borderColor: "rgba(224,52,91,0.4)",
+        background: "rgba(224,52,91,0.06)",
+        color: "var(--wx-danger)",
+      }}
+    >
+      {submit.message}
+    </div>
+  );
+}
 
 /* ────────────── PHONE ────────────── */
 
-function CustomerPhone({ step, next, prev, state, stepContent }: LayoutProps) {
-  const isWelcome = step === 0;
-  const isLast = step === STEPS.length - 1;
+function CustomerPhone({
+  steps,
+  stepIndex,
+  currentStep,
+  lead,
+  next,
+  prev,
+  stepContent,
+  submit,
+  onSubmit,
+}: LayoutProps) {
+  const isWelcome = currentStep === "welcome";
+  const showActions =
+    currentStep !== "welcome" && submit.phase !== "submitted";
+
   return (
-    <div className="flex flex-col pb-28">
-      {!isWelcome && (
+    <div className="flex flex-col pb-24">
+      {!isWelcome && submit.phase !== "submitted" && (
         <div className="sticky top-14 z-30 bg-page/80 backdrop-blur-xl border-b border-stroke px-4 py-3">
-          <HorizontalStepper steps={STEPS} current={step} />
+          <HorizontalStepper
+            steps={steps.map((s) => ({ id: s.id, label: s.label }))}
+            current={stepIndex}
+          />
         </div>
       )}
       <div className="px-4 pt-5">
         <AnimatePresence mode="wait">
           <motion.div
-            key={step}
+            key={`${currentStep}-${submit.phase}`}
             initial={{ opacity: 0, x: 24 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -24 }}
@@ -116,212 +285,161 @@ function CustomerPhone({ step, next, prev, state, stepContent }: LayoutProps) {
         </AnimatePresence>
       </div>
 
-      {/* Sticky pricing summary on flow steps */}
-      {!isWelcome && !isLast && (
-        <div className="px-4 mt-6">
-          <PhoneStackSummary state={state} />
-        </div>
-      )}
-
-      {/* Bottom action bar */}
-      {!isWelcome && (
+      {showActions && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stroke bg-page/95 backdrop-blur-xl">
-          <div className="flex items-center gap-2 px-4 py-3">
-            <button
-              type="button"
-              onClick={prev}
-              className="wx-focus inline-flex h-11 w-11 items-center justify-center rounded-full border border-stroke text-fg-secondary hover:text-fg"
-              aria-label="Previous"
-            >
-              <ArrowLeft size={15} />
-            </button>
-            <GradientButton
-              size="md"
-              onClick={next}
-              fullWidth
-              iconRight={<ArrowRight size={14} />}
-              disabled={isLast}
-            >
-              {isLast ? "Stack ready" : "Continue"}
-            </GradientButton>
+          <div className="flex flex-col gap-2 px-4 py-3">
+            <ErrorBanner submit={submit} />
+            <ActionBar
+              steps={steps}
+              stepIndex={stepIndex}
+              currentStep={currentStep}
+              lead={lead}
+              next={next}
+              prev={prev}
+              submit={submit}
+              onSubmit={onSubmit}
+            />
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function PhoneStackSummary({ state }: { state: CustomerState }) {
-  const quote = useMemo(() => calcQuote(state), [state]);
-  return (
-    <div className="wx-card-quiet flex items-center justify-between gap-3 px-4 py-3">
-      <div className="flex flex-col">
-        <span className="text-[10.5px] uppercase tracking-[0.16em] text-fg-muted">
-          Live stack
-        </span>
-        <span className="wx-display wx-mono text-xl text-fg mt-0.5">
-          ${quote.perMember}
-          <span className="text-[12px] text-fg-muted ml-1">pmpm</span>
-        </span>
-      </div>
-      <div className="flex flex-col items-end text-right">
-        <span className="text-[11px] text-fg-muted">
-          {state.modules.length} modules
-        </span>
-        <span className="text-[12px] text-fg-secondary wx-mono">
-          ${quote.monthly.toLocaleString()}/mo
-        </span>
-      </div>
-      <Sparkles size={14} className="text-wx-orange" />
     </div>
   );
 }
 
 /* ────────────── TABLET ────────────── */
 
-function CustomerTablet({ step, setStep, next, prev, state, stepContent }: LayoutProps) {
-  const isWelcome = step === 0;
+function CustomerTablet({
+  steps,
+  stepIndex,
+  currentStep,
+  lead,
+  next,
+  prev,
+  goTo,
+  stepContent,
+  submit,
+  onSubmit,
+}: LayoutProps) {
+  const isSubmitted = submit.phase === "submitted";
   return (
-    <div className="mx-auto grid max-w-[1400px] grid-cols-[260px_1fr_320px] gap-5 px-5 py-6">
+    <div className="mx-auto grid max-w-[1100px] grid-cols-[260px_1fr] gap-5 px-5 py-6">
       <aside className="sticky top-20 self-start">
         <div className="wx-card-quiet p-4">
-          <div className="wx-eyebrow mb-3">Studio · steps</div>
+          <div className="wx-eyebrow mb-3">Customer Studio</div>
           <VerticalStepper
-            steps={STEPS}
-            current={step}
-            onStepClick={(i) => i <= step && setStep(i)}
+            steps={steps.map((s) => ({
+              id: s.id,
+              label: s.label,
+              description: s.description,
+            }))}
+            current={stepIndex}
+            onStepClick={(i) => i <= stepIndex && goTo(i)}
           />
         </div>
       </aside>
 
       <main className="min-w-0">
-        <div className="wx-card p-6 min-h-[520px]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {stepContent}
-            </motion.div>
-          </AnimatePresence>
+        <div className="wx-card p-6 min-h-[520px] flex flex-col">
+          <div className="flex-1">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${currentStep}-${submit.phase}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {stepContent}
+              </motion.div>
+            </AnimatePresence>
+          </div>
 
-          {!isWelcome && (
-            <div className="mt-6 flex items-center justify-between border-t border-rule pt-5">
-              <button
-                type="button"
-                onClick={prev}
-                className="wx-focus inline-flex h-10 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg"
-              >
-                <ArrowLeft size={13} /> Back
-              </button>
-              <GradientButton
-                size="md"
-                onClick={next}
-                iconRight={<ArrowRight size={14} />}
-                disabled={step === STEPS.length - 1}
-              >
-                {step === STEPS.length - 1 ? "Done" : "Continue"}
-              </GradientButton>
+          {!isSubmitted && currentStep !== "welcome" && (
+            <div className="mt-6 flex flex-col gap-2 border-t border-rule pt-5">
+              <ErrorBanner submit={submit} />
+              <ActionBar
+                steps={steps}
+                stepIndex={stepIndex}
+                currentStep={currentStep}
+                lead={lead}
+                next={next}
+                prev={prev}
+                submit={submit}
+                onSubmit={onSubmit}
+              />
             </div>
           )}
         </div>
       </main>
-
-      <aside className="sticky top-20 self-start">
-        <LiveStack state={state} variant="rail" />
-      </aside>
     </div>
   );
 }
 
 /* ────────────── DESKTOP ────────────── */
 
-function CustomerDesktop({ step, setStep, next, prev, state, stepContent }: LayoutProps) {
-  const isWelcome = step === 0;
+function CustomerDesktop({
+  steps,
+  stepIndex,
+  currentStep,
+  lead,
+  next,
+  prev,
+  goTo,
+  stepContent,
+  submit,
+  onSubmit,
+}: LayoutProps) {
+  const isSubmitted = submit.phase === "submitted";
   return (
-    <div className="mx-auto grid max-w-[1600px] grid-cols-[300px_1fr_360px] gap-6 px-8 py-8">
+    <div className="mx-auto grid max-w-[1300px] grid-cols-[300px_1fr] gap-6 px-8 py-8">
       <aside className="sticky top-24 self-start">
         <div className="wx-card-quiet p-5">
           <div className="wx-eyebrow mb-4">Customer Studio</div>
           <VerticalStepper
-            steps={STEPS}
-            current={step}
-            onStepClick={(i) => i <= step && setStep(i)}
+            steps={steps.map((s) => ({
+              id: s.id,
+              label: s.label,
+              description: s.description,
+            }))}
+            current={stepIndex}
+            onStepClick={(i) => i <= stepIndex && goTo(i)}
           />
         </div>
-        <DesktopArchitectureMap />
       </aside>
 
       <main className="min-w-0">
-        <div className="wx-card p-8 min-h-[640px]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {stepContent}
-            </motion.div>
-          </AnimatePresence>
+        <div className="wx-card p-8 min-h-[640px] flex flex-col">
+          <div className="flex-1">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${currentStep}-${submit.phase}`}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {stepContent}
+              </motion.div>
+            </AnimatePresence>
+          </div>
 
-          {!isWelcome && (
-            <div className="mt-8 flex items-center justify-between border-t border-rule pt-6">
-              <button
-                type="button"
-                onClick={prev}
-                className="wx-focus inline-flex h-10 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg"
-              >
-                <ArrowLeft size={13} /> Back
-              </button>
-              <GradientButton
-                size="md"
-                onClick={next}
-                iconRight={<ArrowRight size={14} />}
-                disabled={step === STEPS.length - 1}
-              >
-                {step === STEPS.length - 1 ? "Done" : "Continue"}
-              </GradientButton>
+          {!isSubmitted && currentStep !== "welcome" && (
+            <div className="mt-8 flex flex-col gap-3 border-t border-rule pt-6">
+              <ErrorBanner submit={submit} />
+              <ActionBar
+                steps={steps}
+                stepIndex={stepIndex}
+                currentStep={currentStep}
+                lead={lead}
+                next={next}
+                prev={prev}
+                submit={submit}
+                onSubmit={onSubmit}
+              />
             </div>
           )}
         </div>
       </main>
-
-      <aside className="sticky top-24 self-start">
-        <LiveStack state={state} variant="rail" />
-      </aside>
-    </div>
-  );
-}
-
-function DesktopArchitectureMap() {
-  return (
-    <div className="wx-card-quiet mt-5 p-5">
-      <div className="wx-eyebrow mb-3">Wellx architecture</div>
-      <div className="space-y-2 text-[12px]">
-        {[
-          { label: "Member experience", tone: "var(--wx-orange)" },
-          { label: "Care pathways", tone: "var(--wx-pink)" },
-          { label: "Clinical engine", tone: "var(--wx-purple-pink)" },
-          { label: "Data + insights", tone: "var(--wx-purple)" },
-          { label: "Cover + commercial", tone: "var(--wx-sky)" },
-        ].map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center gap-2.5 py-1.5"
-          >
-            <span
-              className="h-2 w-2 rounded-full shrink-0"
-              style={{ background: row.tone, boxShadow: `0 0 12px ${row.tone}` }}
-            />
-            <span className="text-fg-secondary">{row.label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
