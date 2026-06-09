@@ -672,7 +672,7 @@ function KsaBrokerPicker({
           the list.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {KSA_BROKERS.map((b) => {
           const active = lead.ksaBroker === b.id;
           return (
@@ -979,16 +979,11 @@ export function PeopleStep({
   lead: CustomerLead;
   set: (p: Partial<CustomerLead>) => void;
 }) {
-  // Roughly half/half split by default. If the user hasn't customised the
-  // split, keep it in sync with the total. If they have, leave their numbers
-  // alone — the Wellx team will reconcile.
-  const half = Math.round(lead.totalPeople / 2);
-  const employees = lead.employeeCount ?? half;
-  const dependants = lead.dependantCount ?? lead.totalPeople - employees;
-  const splitTouched =
-    lead.employeeCount !== undefined || lead.dependantCount !== undefined;
-  const splitMismatch =
-    splitTouched && employees + dependants !== lead.totalPeople;
+  // Split is a percentage of total — defaults to 50/50, can't go out of
+  // range, so there's no error state to recover from.
+  const pct = lead.employeePct ?? 50;
+  const empCount = Math.round((lead.totalPeople * pct) / 100);
+  const depCount = lead.totalPeople - empCount;
 
   return (
     <StepBody
@@ -1038,41 +1033,89 @@ export function PeopleStep({
           </div>
         </div>
 
-        {/* Compact, de-emphasized 50/50 split. Defaults to half each;
-            user can tweak inline. */}
-        <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-fg-muted px-1">
-          <span>Roughly</span>
-          <InlineNumber
-            value={employees}
-            onChange={(v) => set({ employeeCount: v })}
-            label="employees"
+        {/* Compact split as a percentage — drag instead of typing. */}
+        <div className="flex flex-col gap-2 px-1">
+          <div className="flex items-baseline justify-between text-[11.5px]">
+            <span className="text-fg-muted">Roughly the split</span>
+            {pct !== 50 && (
+              <button
+                type="button"
+                onClick={() => set({ employeePct: 50 })}
+                className="wx-focus text-[11px] text-fg-muted underline-offset-2 hover:underline"
+              >
+                reset to 50/50
+              </button>
+            )}
+          </div>
+          <SplitSlider
+            pct={pct}
+            onChange={(v) => set({ employeePct: v })}
           />
-          <span>·</span>
-          <InlineNumber
-            value={dependants}
-            onChange={(v) => set({ dependantCount: v })}
-            label="dependants"
-          />
-          {splitTouched && (
-            <button
-              type="button"
-              onClick={() =>
-                set({ employeeCount: undefined, dependantCount: undefined })
-              }
-              className="wx-focus underline-offset-2 hover:underline text-fg-muted"
-            >
-              reset to 50/50
-            </button>
-          )}
-          {splitMismatch && (
-            <span className="text-[color:var(--wx-orange)]">
-              ({(employees + dependants).toLocaleString()} ≠{" "}
-              {lead.totalPeople.toLocaleString()} — team will reconcile)
+          <div className="flex items-baseline justify-between text-[11.5px] text-fg-secondary">
+            <span>
+              <span className="wx-mono text-fg">{pct}%</span> employees{" "}
+              <span className="text-fg-muted">
+                · {empCount.toLocaleString()}
+              </span>
             </span>
-          )}
+            <span>
+              <span className="wx-mono text-fg">{100 - pct}%</span> dependants{" "}
+              <span className="text-fg-muted">
+                · {depCount.toLocaleString()}
+              </span>
+            </span>
+          </div>
         </div>
       </div>
     </StepBody>
+  );
+}
+
+function SplitSlider({
+  pct,
+  onChange,
+}: {
+  pct: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="relative h-6 select-none">
+      {/* Visual gradient bar — employees on the left, dependants on the right. */}
+      <div
+        className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full overflow-hidden"
+        style={{ background: "var(--wx-text-faint)" }}
+      >
+        <div
+          className="h-full"
+          style={{
+            width: `${pct}%`,
+            background: "var(--wx-gradient-warm)",
+            transition: "width 120ms var(--wx-ease)",
+          }}
+        />
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={pct}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Share of employees vs dependants"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      />
+      {/* Custom handle visualisation */}
+      <div
+        aria-hidden
+        className="absolute top-1/2 h-5 w-5 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-white bg-card"
+        style={{
+          left: `${pct}%`,
+          background: "var(--wx-gradient-warm)",
+          boxShadow: "0 4px 12px var(--wx-glow-shadow-warm)",
+          transition: "left 120ms var(--wx-ease)",
+        }}
+      />
+    </div>
   );
 }
 
@@ -1117,9 +1160,9 @@ export function ReviewStep({
   set: (p: Partial<CustomerLead>) => void;
 }) {
   const selectedGoals = GOALS.filter((g) => lead.goals.includes(g.id));
-  const half = Math.round(lead.totalPeople / 2);
-  const employees = lead.employeeCount ?? half;
-  const dependants = lead.dependantCount ?? lead.totalPeople - employees;
+  const reviewPct = lead.employeePct ?? 50;
+  const employees = Math.round((lead.totalPeople * reviewPct) / 100);
+  const dependants = lead.totalPeople - employees;
   return (
     <StepBody
       eyebrow="05 · Review &amp; submit"
@@ -1541,32 +1584,6 @@ function Checkbox({
         {label}
       </span>
     </label>
-  );
-}
-
-function InlineNumber({
-  value,
-  onChange,
-  label,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  label: string;
-}) {
-  return (
-    <span className="inline-flex items-baseline gap-1">
-      <input
-        type="number"
-        value={value}
-        min={0}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n) && n >= 0) onChange(n);
-        }}
-        className="wx-focus wx-mono w-[70px] rounded-md border border-stroke bg-card-elev px-1.5 py-0.5 text-[11.5px] text-fg outline-none"
-      />
-      <span>{label}</span>
-    </span>
   );
 }
 

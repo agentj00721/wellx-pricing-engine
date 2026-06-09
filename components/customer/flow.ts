@@ -22,7 +22,7 @@ export type Country = "uae" | "ksa" | "ph";
 
 export type InsurerId = "qic" | "liva" | "dni" | "salama" | "adnt" | "other";
 
-export type KsaBrokerId = "elite" | "marsh" | "other";
+export type KsaBrokerId = "elite" | "marsh" | "kingdom" | "other";
 
 export type CustomerLead = {
   forWho?: ForWho;
@@ -40,8 +40,12 @@ export type CustomerLead = {
   companyName?: string;
   authorizeWellxContact?: boolean;
   totalPeople: number;
-  employeeCount?: number;
-  dependantCount?: number;
+  /**
+   * Share of the covered population who are employees (0–100). The
+   * remainder are dependants. We store the percentage and derive the
+   * absolute counts on submit — there's no valid way to have a mismatch.
+   */
+  employeePct: number;
   addOnModules: string[];
 
   // contact (collected at review for team path; on self path it's collected
@@ -56,8 +60,7 @@ export type CustomerLead = {
 
 export const initialLead: CustomerLead = {
   totalPeople: 50,
-  employeeCount: 25,
-  dependantCount: 25,
+  employeePct: 50,
   goals: [],
   addOnModules: [],
 };
@@ -140,6 +143,7 @@ export const KSA_BROKERS: {
 }[] = [
   { id: "elite", label: "Elite", short: "Elite", arranged: true },
   { id: "marsh", label: "Marsh", short: "Marsh", arranged: true },
+  { id: "kingdom", label: "Kingdom Brokers", short: "Kingdom", arranged: true },
   { id: "other", label: "Other", short: "Other", arranged: false },
 ];
 
@@ -371,6 +375,17 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
   }
 }
 
+/** Round-half-up share of the population who are employees. */
+export function derivedEmployeeCount(lead: CustomerLead): number {
+  const pct = clampPct(lead.employeePct);
+  return Math.round((lead.totalPeople * pct) / 100);
+}
+
+export function clampPct(v: number | undefined): number {
+  if (v === undefined || !Number.isFinite(v)) return 50;
+  return Math.max(0, Math.min(100, v));
+}
+
 export function isValidEmail(v: string | undefined): boolean {
   if (!v) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -402,8 +417,8 @@ export function leadToPayload(lead: CustomerLead) {
     company_name: lead.companyName ?? null,
     authorize_wellx_contact: lead.authorizeWellxContact ?? false,
     total_people: lead.totalPeople,
-    employee_count: lead.employeeCount ?? null,
-    dependant_count: lead.dependantCount ?? null,
+    employee_count: derivedEmployeeCount(lead),
+    dependant_count: lead.totalPeople - derivedEmployeeCount(lead),
     add_on_modules: lead.addOnModules,
     contact_name: lead.contactName ?? null,
     contact_email: lead.contactEmail ?? null,
