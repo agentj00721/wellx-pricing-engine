@@ -18,11 +18,13 @@ export function TopBar() {
       style={{ background: "var(--wx-nav-bg)" }}
     >
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-3 px-4 sm:h-16 sm:px-6 lg:px-8">
-        <BrandMark showSub={device !== "phone"} />
+        <BrandMark
+          height={device === "phone" ? 22 : 26}
+          showSub={device !== "phone"}
+        />
 
         {device !== "phone" ? (
-          <div className="ml-2 hidden items-center gap-2.5 sm:flex">
-            <span className="wx-rule w-6" />
+          <div className="ml-3 hidden items-center gap-2.5 sm:flex">
             <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
               {current.longLabel}
             </span>

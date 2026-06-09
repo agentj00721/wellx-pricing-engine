@@ -27,7 +27,8 @@ export type CustomerLead = {
   insurer?: InsurerId;
   insurerOtherName?: string;
   brokerName?: string;
-  brokerContact?: string;
+  brokerEmail?: string;
+  brokerPhone?: string;
   companyName?: string;
   authorizeWellxContact?: boolean;
   totalPeople: number;
@@ -233,8 +234,6 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
       return lead.goals.length > 0;
     case "sourcing": {
       if (!lead.sourcing) return false;
-      // every B2B path collects the company name
-      if (!lead.companyName?.trim()) return false;
       if (lead.sourcing === "direct") return true;
       // insurer path requires picking one
       if (!lead.insurer) return false;
@@ -242,9 +241,14 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
         return (
           !!lead.insurerOtherName?.trim() &&
           !!lead.brokerName?.trim() &&
-          !!lead.brokerContact?.trim()
+          isValidEmail(lead.brokerEmail) &&
+          isValidPhone(lead.brokerPhone)
         );
       }
+      // Listed insurer: broker details optional, but if any email/phone is
+      // provided it must be well-formed.
+      if (lead.brokerEmail && !isValidEmail(lead.brokerEmail)) return false;
+      if (lead.brokerPhone && !isValidPhone(lead.brokerPhone)) return false;
       return true;
     }
     case "modules":
@@ -257,12 +261,26 @@ export function canAdvance(stepId: StepId, lead: CustomerLead): boolean {
     case "review":
       return (
         !!lead.contactName?.trim() &&
-        !!lead.contactEmail?.trim() &&
-        /.+@.+\..+/.test(lead.contactEmail ?? "")
+        !!lead.companyName?.trim() &&
+        isValidEmail(lead.contactEmail)
       );
     default:
       return false;
   }
+}
+
+export function isValidEmail(v: string | undefined): boolean {
+  if (!v) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+export function isValidPhone(v: string | undefined): boolean {
+  if (!v) return false;
+  // Accept digits, spaces, dashes, parentheses, leading +. Require at least 7 digits.
+  const trimmed = v.trim();
+  if (!/^\+?[\d\s\-().]+$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15;
 }
 
 /* ────────────── Submission payload ────────────── */
@@ -275,7 +293,8 @@ export function leadToPayload(lead: CustomerLead) {
     insurer: lead.insurer ?? null,
     insurer_other_name: lead.insurerOtherName ?? null,
     broker_name: lead.brokerName ?? null,
-    broker_contact: lead.brokerContact ?? null,
+    broker_email: lead.brokerEmail ?? null,
+    broker_phone: lead.brokerPhone ?? null,
     company_name: lead.companyName ?? null,
     authorize_wellx_contact: lead.authorizeWellxContact ?? false,
     total_people: lead.totalPeople,

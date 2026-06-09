@@ -212,8 +212,8 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-/* Brand wordmark — matches the Wellx canonical lockup.
-   Light mode: deep ink. Dark mode: pure white. */
+/* Legacy wx-wordmark class (typeset wellx text) — kept for back-compat,
+   but the canonical lockup is now the wx-wordmark-lockup image stack. */
 .wx-wordmark {
   color: var(--wx-text-primary);
   font-weight: 800;
@@ -221,6 +221,20 @@ body {
 }
 [data-theme="dark"] .wx-wordmark {
   color: #ffffff;
+}
+
+/* Wellx wordmark lockup — full brand PNG, theme-aware.
+   Default (no data-theme attr) shows light; data-theme="dark" flips
+   to the inverted PNG. Selectors precede any flash because the
+   inline <head> script sets data-theme before paint. */
+.wx-wordmark-dark {
+  display: none;
+}
+[data-theme="dark"] .wx-wordmark-light {
+  display: none;
+}
+[data-theme="dark"] .wx-wordmark-dark {
+  display: block;
 }
 
 .wx-gradient-text-warm {

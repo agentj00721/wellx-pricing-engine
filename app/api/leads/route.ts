@@ -91,7 +91,8 @@ const ALLOWED_KEYS = new Set([
   "insurer",
   "insurer_other_name",
   "broker_name",
-  "broker_contact",
+  "broker_email",
+  "broker_phone",
   "company_name",
   "authorize_wellx_contact",
   "total_people",
@@ -151,8 +152,21 @@ function validate(p: Record<string, unknown>): string | null {
   }
 
   if (p.contact_email && typeof p.contact_email === "string") {
-    if (!/.+@.+\..+/.test(p.contact_email))
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.contact_email))
       return "Invalid contact email";
+  }
+  if (p.broker_email && typeof p.broker_email === "string") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.broker_email))
+      return "Invalid broker email";
+  }
+  if (p.broker_phone && typeof p.broker_phone === "string") {
+    const digits = p.broker_phone.replace(/\D/g, "");
+    if (
+      !/^\+?[\d\s\-().]+$/.test(p.broker_phone) ||
+      digits.length < 7 ||
+      digits.length > 15
+    )
+      return "Invalid broker phone";
   }
   if (p.total_people !== undefined && p.total_people !== null) {
     const n = Number(p.total_people);

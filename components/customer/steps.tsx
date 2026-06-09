@@ -21,6 +21,8 @@ import {
   ADD_ON_MODULES,
   GOALS,
   INSURERS,
+  isValidEmail,
+  isValidPhone,
   type CustomerLead,
   type InsurerId,
   type SourcingMethod,
@@ -312,28 +314,7 @@ export function SourcingStep({
                   }
                 />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <TextField
-                    label="Company name"
-                    value={lead.companyName ?? ""}
-                    onChange={(v) => set({ companyName: v })}
-                    placeholder="Your company"
-                    required
-                  />
-                  <TextField
-                    label="Broker name"
-                    value={lead.brokerName ?? ""}
-                    onChange={(v) => set({ brokerName: v })}
-                    placeholder="Broker firm + person"
-                  />
-                  <TextField
-                    label="Broker contact"
-                    value={lead.brokerContact ?? ""}
-                    onChange={(v) => set({ brokerContact: v })}
-                    placeholder="Email or phone"
-                    className="sm:col-span-2"
-                  />
-                </div>
+                <BrokerFields lead={lead} set={set} requireAll={false} />
 
                 <Checkbox
                   checked={!!lead.authorizeWellxContact}
@@ -364,36 +345,14 @@ export function SourcingStep({
                     </>
                   }
                 />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <TextField
-                    label="Insurer name"
-                    value={lead.insurerOtherName ?? ""}
-                    onChange={(v) => set({ insurerOtherName: v })}
-                    placeholder="e.g. Sukoon"
-                    required
-                  />
-                  <TextField
-                    label="Company name"
-                    value={lead.companyName ?? ""}
-                    onChange={(v) => set({ companyName: v })}
-                    placeholder="Your company"
-                    required
-                  />
-                  <TextField
-                    label="Broker name"
-                    value={lead.brokerName ?? ""}
-                    onChange={(v) => set({ brokerName: v })}
-                    placeholder="Broker firm + person"
-                    required
-                  />
-                  <TextField
-                    label="Broker contact"
-                    value={lead.brokerContact ?? ""}
-                    onChange={(v) => set({ brokerContact: v })}
-                    placeholder="Email or phone"
-                    required
-                  />
-                </div>
+                <TextField
+                  label="Insurer name"
+                  value={lead.insurerOtherName ?? ""}
+                  onChange={(v) => set({ insurerOtherName: v })}
+                  placeholder="e.g. Sukoon"
+                  required
+                />
+                <BrokerFields lead={lead} set={set} requireAll />
               </div>
             )}
           </motion.div>
@@ -403,28 +362,12 @@ export function SourcingStep({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col gap-4"
           >
             <InfoBlock
               tone="info"
               title="You'll work with Wellx directly."
               body="No middlemen. We'll shape your stack with you and price it directly."
             />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <TextField
-                label="Company name"
-                value={lead.companyName ?? ""}
-                onChange={(v) => set({ companyName: v })}
-                placeholder="Your company"
-                required
-              />
-              <TextField
-                label="Existing broker (if any)"
-                value={lead.brokerName ?? ""}
-                onChange={(v) => set({ brokerName: v })}
-                placeholder="Broker firm + person"
-              />
-            </div>
           </motion.div>
         )}
       </div>
@@ -740,14 +683,9 @@ export function ReviewStep({
               label="Company"
               value={lead.companyName ?? "—"}
             />
-            <ReviewRow
-              label="Broker"
-              value={
-                lead.brokerName
-                  ? `${lead.brokerName}${lead.brokerContact ? ` (${lead.brokerContact})` : ""}`
-                  : "—"
-              }
-            />
+            <ReviewRow label="Broker" value={lead.brokerName ?? "—"} />
+            <ReviewRow label="Broker email" value={lead.brokerEmail ?? "—"} />
+            <ReviewRow label="Broker phone" value={lead.brokerPhone ?? "—"} />
             <ReviewRow
               label="Total people"
               value={lead.totalPeople.toLocaleString()}
@@ -779,11 +717,17 @@ export function ReviewStep({
               required
             />
             <TextField
+              label="Company"
+              value={lead.companyName ?? ""}
+              onChange={(v) => set({ companyName: v })}
+              placeholder="Your company"
+              required
+            />
+            <EmailField
               label="Work email"
               value={lead.contactEmail ?? ""}
               onChange={(v) => set({ contactEmail: v })}
               placeholder="you@company.com"
-              type="email"
               required
             />
             <TextField
@@ -791,7 +735,6 @@ export function ReviewStep({
               value={lead.contactRole ?? ""}
               onChange={(v) => set({ contactRole: v })}
               placeholder="e.g. Head of People"
-              className="sm:col-span-2"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -931,6 +874,145 @@ function TextField({
         placeholder={placeholder}
         className="wx-focus w-full rounded-xl border border-stroke bg-card-elev px-3 py-2.5 text-[13.5px] text-fg outline-none placeholder:text-fg-muted"
       />
+    </div>
+  );
+}
+
+function BrokerFields({
+  lead,
+  set,
+  requireAll,
+}: {
+  lead: CustomerLead;
+  set: (p: Partial<CustomerLead>) => void;
+  requireAll: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <TextField
+        label="Broker name"
+        value={lead.brokerName ?? ""}
+        onChange={(v) => set({ brokerName: v })}
+        placeholder="Broker firm + person"
+        required={requireAll}
+        className="sm:col-span-2"
+      />
+      <EmailField
+        label="Broker email"
+        value={lead.brokerEmail ?? ""}
+        onChange={(v) => set({ brokerEmail: v })}
+        placeholder="broker@firm.com"
+        required={requireAll}
+      />
+      <PhoneField
+        label="Broker phone"
+        value={lead.brokerPhone ?? ""}
+        onChange={(v) => set({ brokerPhone: v })}
+        placeholder="+971 50 123 4567"
+        required={requireAll}
+      />
+    </div>
+  );
+}
+
+function EmailField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const showError = value.length > 0 && !isValidEmail(value);
+  return (
+    <ValidatedField
+      label={label}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      type="email"
+      inputMode="email"
+      error={showError ? "Doesn't look like a valid email." : undefined}
+    />
+  );
+}
+
+function PhoneField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const showError = value.length > 0 && !isValidPhone(value);
+  return (
+    <ValidatedField
+      label={label}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      type="tel"
+      inputMode="tel"
+      error={showError ? "Use 7–15 digits, e.g. +971 50 123 4567." : undefined}
+    />
+  );
+}
+
+function ValidatedField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type,
+  inputMode,
+  required,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  inputMode?: "email" | "tel" | "text";
+  required?: boolean;
+  error?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Eyebrow>
+        {label}
+        {required ? <span className="text-wx-orange ml-0.5">*</span> : null}
+      </Eyebrow>
+      <input
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-invalid={!!error}
+        className="wx-focus w-full rounded-xl border bg-card-elev px-3 py-2.5 text-[13.5px] text-fg outline-none placeholder:text-fg-muted"
+        style={{
+          borderColor: error ? "rgba(224,52,91,0.5)" : "var(--wx-section-stroke)",
+        }}
+      />
+      {error && (
+        <span className="text-[11px] text-[color:var(--wx-danger)] mt-0.5">
+          {error}
+        </span>
+      )}
     </div>
   );
 }
