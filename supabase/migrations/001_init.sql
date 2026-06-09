@@ -85,19 +85,24 @@ create trigger leads_updated_at
 
 -- ============================================================
 -- Row-level security
--- The Customer Studio uses the anon key to INSERT new leads.
--- Reads/updates require the service-role key (team API routes).
+-- The /api/leads route uses the service-role key (bypasses RLS).
+-- The public INSERT policy below is a belt-and-braces guard in case
+-- anything ever inserts via the anon / publishable key directly.
+-- We use TO public (instead of TO anon) so the new Supabase
+-- publishable-key role is also covered.
 -- ============================================================
 
 alter table leads enable row level security;
 
 drop policy if exists "anon can submit leads" on leads;
-create policy "anon can submit leads"
+drop policy if exists "public can submit leads" on leads;
+
+create policy "public can submit leads"
   on leads
   for insert
-  to anon
+  to public
   with check (
-    status = 'submitted' and
+    status = 'submitted'::lead_status and
     pricing_pmpm is null and
     pricing_monthly is null and
     assigned_to is null and

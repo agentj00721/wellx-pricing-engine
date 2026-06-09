@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAnonClient, isSupabaseConfigured } from "@/lib/supabase";
+import { getServiceClient, isSupabaseConfigured } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -50,7 +50,11 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = getAnonClient();
+  // The Route Handler runs server-side, so we use the service-role client.
+  // It bypasses RLS, which lets us INSERT ... RETURNING (id, reference) in
+  // a single round-trip. RLS still protects against direct REST calls from
+  // untrusted clients that try to bypass this endpoint.
+  const supabase = getServiceClient();
   if (!supabase) {
     return NextResponse.json(
       { ok: false, error: "Database client unavailable" },
