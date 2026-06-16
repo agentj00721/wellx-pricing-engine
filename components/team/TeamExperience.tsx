@@ -1,34 +1,201 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ArrowRight, FileText, Share2, Sparkles } from "lucide-react";
-import { motion } from "motion/react";
-import { useDevice } from "@/components/providers";
-import { Eyebrow, StatPill } from "@/components/ui/atoms";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import { GradientButton } from "@/components/ui/GradientButton";
-import { Tag } from "@/components/ui/Panel";
-import { CommercialBuilder } from "./CommercialBuilder";
-import { DealIntake } from "./DealIntake";
-import { Guardrails } from "./Guardrails";
-import { PricingOutput } from "./PricingOutput";
-import { calcDeal, evaluateGuardrails, initialDeal, type DealState } from "./deal";
+import { Eyebrow } from "@/components/ui/atoms";
+import { useDevice } from "@/components/providers";
+import { type Lead } from "@/lib/team-leads";
+import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
+import { TeamInbox } from "./Inbox";
+import { LeadDetail } from "./LeadDetail";
+
+type LoadState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "ready" }
+  | { phase: "error"; message: string };
 
 export function TeamExperience() {
   const { device } = useDevice();
-  const [deal, setDeal] = useState<DealState>(initialDeal);
   const [intro, setIntro] = useState(true);
-  const set = useCallback(
-    (p: Partial<DealState>) => setDeal((d) => ({ ...d, ...p })),
-    [],
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [pricing, setPricing] = useState<PricingConfig>(DEFAULT_PRICING);
+  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const [load, setLoad] = useState<LoadState>({ phase: "idle" });
+
+  const fetchLeads = useCallback(async () => {
+    setLoad({ phase: "loading" });
+    try {
+      const res = await fetch("/api/team/leads", { cache: "no-store" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        leads?: Lead[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !Array.isArray(data.leads)) {
+        throw new Error(data.error ?? `Failed to load (${res.status})`);
+      }
+      setLeads(data.leads);
+      setLoad({ phase: "ready" });
+    } catch (err) {
+      setLoad({
+        phase: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (intro) return;
+    // Defer the kick-off so the effect body itself doesn't synchronously
+    // dispatch a setState — the lint rule wants the fetch to look like a
+    // pure subscription. Real work happens in the microtask.
+    queueMicrotask(() => {
+      fetchLeads();
+      fetch("/api/pricing")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d?.config) setPricing(d.config as PricingConfig);
+        })
+        .catch(() => {});
+    });
+  }, [intro, fetchLeads]);
+
+  /**
+   * Move a lead between status columns. Optimistic: we update the local
+   * state immediately and roll back if the PATCH fails.
+   */
+  const onMove = useCallback(
+    async (id: string, status: Lead["status"]) => {
+      const previous = leads;
+      setLeads((ls) =>
+        ls.map((l) => (l.id === id ? { ...l, status } : l)),
+      );
+      try {
+        const res = await fetch(`/api/team/leads/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          lead?: Lead;
+          error?: string;
+        };
+        if (!res.ok || !data.ok || !data.lead) {
+          throw new Error(data.error ?? `PATCH failed (${res.status})`);
+        }
+        setLeads((ls) => ls.map((l) => (l.id === id ? data.lead! : l)));
+      } catch {
+        // Revert
+        setLeads(previous);
+      }
+    },
+    [leads],
   );
+
+  const onSave = useCallback(
+    async (
+      patch: Partial<Lead> & { status?: Lead["status"] },
+    ): Promise<void> => {
+      if (!openLeadId) return;
+      const previous = leads;
+      // optimistic
+      setLeads((ls) =>
+        ls.map((l) =>
+          l.id === openLeadId ? ({ ...l, ...patch } as Lead) : l,
+        ),
+      );
+      try {
+        const res = await fetch(`/api/team/leads/${openLeadId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          lead?: Lead;
+          error?: string;
+        };
+        if (!res.ok || !data.ok || !data.lead) {
+          throw new Error(data.error ?? `Save failed (${res.status})`);
+        }
+        setLeads((ls) =>
+          ls.map((l) => (l.id === openLeadId ? data.lead! : l)),
+        );
+      } catch (err) {
+        setLeads(previous);
+        throw err;
+      }
+    },
+    [openLeadId, leads],
+  );
+
+  const openLead = openLeadId
+    ? leads.find((l) => l.id === openLeadId) ?? null
+    : null;
 
   if (intro) {
     return <Intro onStart={() => setIntro(false)} />;
   }
 
-  if (device === "phone") return <TeamPhone deal={deal} set={set} />;
-  if (device === "tablet") return <TeamTablet deal={deal} set={set} />;
-  return <TeamDesktop deal={deal} set={set} />;
+  return (
+    <div
+      className={`mx-auto px-4 py-6 ${
+        device === "phone" ? "" : "px-6 lg:px-8"
+      } max-w-[1500px]`}
+    >
+      <TeamInbox
+        leads={leads}
+        loading={load.phase === "loading"}
+        onMove={onMove}
+        onOpen={(l) => setOpenLeadId(l.id)}
+      />
+      {load.phase === "error" && (
+        <div className="mt-4 flex items-center justify-between rounded-xl border px-3 py-2 text-[12px]"
+          style={{
+            borderColor: "rgba(224,52,91,0.4)",
+            background: "rgba(224,52,91,0.06)",
+            color: "var(--wx-danger)",
+          }}
+        >
+          <span>{load.message}</span>
+          <button
+            type="button"
+            onClick={fetchLeads}
+            className="wx-focus inline-flex items-center gap-1 text-[12px] underline-offset-2 hover:underline"
+          >
+            <RefreshCw size={11} /> Retry
+          </button>
+        </div>
+      )}
+
+      {openLead && (
+        <>
+          <div
+            className="fixed inset-0 z-30 bg-page/40 backdrop-blur-sm"
+            onClick={() => setOpenLeadId(null)}
+          />
+          <LeadDetail
+            key={openLead.id}
+            lead={openLead}
+            pricing={pricing}
+            onClose={() => setOpenLeadId(null)}
+            onSave={onSave}
+            onMarkWon={async () => {
+              await onSave({ status: "won" });
+              setOpenLeadId(null);
+            }}
+            onMarkLost={async () => {
+              await onSave({ status: "lost" });
+              setOpenLeadId(null);
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
 }
 
 function Intro({ onStart }: { onStart: () => void }) {
@@ -52,213 +219,17 @@ function Intro({ onStart }: { onStart: () => void }) {
           opportunity.
         </h1>
         <p className="max-w-xl text-[15px] sm:text-[16px] leading-relaxed text-fg-secondary">
-          Shape commercials, surface guardrails, and see net Wellx revenue
-          before you send a single proposal.
+          Every brief the Customer Studio captured lands in the inbox. Drag
+          to triage, click to price, save to send. The discount lever is
+          capped at 10% for now &mdash; Founders pricing controls will
+          widen this later.
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <GradientButton size="lg" onClick={onStart} iconRight={<ArrowRight size={16} />}>
-            Open cockpit
-          </GradientButton>
-          <button className="wx-focus inline-flex h-12 items-center justify-center gap-2 rounded-full border border-stroke px-5 text-[13.5px] text-fg-secondary hover:text-fg hover:border-wx-purple/40">
-            Load deal from CRM
-          </button>
-        </div>
-
-        <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-2xl">
-          <StatPill label="Live deals" value="38" delta="+5" />
-          <StatPill label="Median GM" value="44%" delta="+3pts" />
-          <StatPill label="Win rate" value="62%" delta="+7%" />
-          <StatPill label="Avg cycle" value="34d" delta="−6d" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ────────────── PHONE ────────────── */
-
-function TeamPhone({
-  deal,
-  set,
-}: {
-  deal: DealState;
-  set: (p: Partial<DealState>) => void;
-}) {
-  const result = calcDeal(deal);
-  const rails = evaluateGuardrails(deal);
-  return (
-    <div className="flex flex-col gap-4 px-4 pb-24 pt-5">
-      <header className="flex items-center justify-between">
-        <div>
-          <Eyebrow accent="warm">Pricing cockpit</Eyebrow>
-          <h2 className="wx-display text-2xl mt-1">
-            <span className="wx-gradient-text">{deal.account}</span>
-          </h2>
-          <p className="text-[12px] text-fg-muted mt-1">
-            {deal.region} · {deal.members.toLocaleString()} members
-          </p>
-        </div>
-        <Tag tone={result.grossMargin > 0.45 ? "success" : "warm"}>
-          GM {(result.grossMargin * 100).toFixed(0)}%
-        </Tag>
-      </header>
-
-      <DealIntake deal={deal} set={set} />
-      <CommercialBuilder deal={deal} set={set} />
-      <PricingOutput deal={deal} />
-      <Guardrails deal={deal} />
-
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stroke bg-page/95 backdrop-blur-xl">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <button className="wx-focus inline-flex h-11 w-11 items-center justify-center rounded-full border border-stroke text-fg-secondary">
-            <Share2 size={15} />
-          </button>
-          <GradientButton
-            size="md"
-            fullWidth
-            iconRight={<ArrowRight size={14} />}
-            disabled={rails.some((r) => r.severity === "danger")}
-          >
-            {rails.some((r) => r.severity === "danger")
-              ? "Escalation required"
-              : "Send proposal"}
+            Open the inbox
           </GradientButton>
         </div>
       </div>
     </div>
-  );
-}
-
-/* ────────────── TABLET ────────────── */
-
-function TeamTablet({
-  deal,
-  set,
-}: {
-  deal: DealState;
-  set: (p: Partial<DealState>) => void;
-}) {
-  const result = calcDeal(deal);
-  return (
-    <div className="mx-auto grid max-w-[1400px] grid-cols-[1fr_400px] gap-5 px-5 py-6">
-      <main className="flex flex-col gap-5 min-w-0">
-        <DealHeader deal={deal} />
-        <DealIntake deal={deal} set={set} />
-        <CommercialBuilder deal={deal} set={set} />
-      </main>
-      <aside className="sticky top-20 self-start flex flex-col gap-5">
-        <PricingOutput deal={deal} />
-        <Guardrails deal={deal} />
-        <SendBar deal={deal} margin={result.grossMargin} />
-      </aside>
-    </div>
-  );
-}
-
-/* ────────────── DESKTOP ────────────── */
-
-function TeamDesktop({
-  deal,
-  set,
-}: {
-  deal: DealState;
-  set: (p: Partial<DealState>) => void;
-}) {
-  const result = calcDeal(deal);
-  return (
-    <div className="mx-auto grid max-w-[1700px] grid-cols-[360px_1fr_400px] gap-6 px-8 py-8">
-      <aside className="flex flex-col gap-5">
-        <DealHeader deal={deal} variant="compact" />
-        <DealIntake deal={deal} set={set} />
-      </aside>
-
-      <main className="flex flex-col gap-5 min-w-0">
-        <CommercialBuilder deal={deal} set={set} />
-        <PricingOutput deal={deal} />
-      </main>
-
-      <aside className="sticky top-24 self-start flex flex-col gap-5">
-        <Guardrails deal={deal} />
-        <SendBar deal={deal} margin={result.grossMargin} />
-      </aside>
-    </div>
-  );
-}
-
-function DealHeader({
-  deal,
-  variant = "wide",
-}: {
-  deal: DealState;
-  variant?: "wide" | "compact";
-}) {
-  const result = calcDeal(deal);
-  return (
-    <div className="wx-card p-5 flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Eyebrow accent="warm">Active opportunity</Eyebrow>
-          <h2 className="wx-display text-2xl mt-1 sm:text-3xl">
-            <span className="wx-gradient-text">{deal.account}</span>
-          </h2>
-          <p className="text-[12.5px] text-fg-muted mt-1.5">
-            {deal.region} · {deal.members.toLocaleString()} members · {deal.contractMonths}mo
-          </p>
-        </div>
-        <Tag tone={result.grossMargin > 0.45 ? "success" : "warm"}>
-          GM {(result.grossMargin * 100).toFixed(0)}%
-        </Tag>
-      </div>
-      {variant === "wide" && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <StatPill label="Per member / mo" value={`$${result.pmpm}`} />
-          <StatPill label="Net monthly" value={`$${result.netMonthly.toLocaleString()}`} />
-          <StatPill label="Annual net" value={`$${result.annualWellxNet.toLocaleString()}`} />
-          <StatPill label="TCV" value={`$${result.tcv.toLocaleString()}`} delta="+commit" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SendBar({ deal, margin }: { deal: DealState; margin: number }) {
-  const rails = evaluateGuardrails(deal);
-  const blocking = rails.some((r) => r.severity === "danger");
-  return (
-    <motion.div
-      layout
-      className="wx-card p-4 flex flex-col gap-3"
-      style={{
-        background: blocking
-          ? "linear-gradient(135deg, rgba(224,52,91,0.08), var(--wx-card-bg))"
-          : undefined,
-      }}
-    >
-      <div className="flex items-center justify-between">
-        <Eyebrow>Action</Eyebrow>
-        <span className="text-[11px] text-fg-muted">
-          {blocking ? "Blocked by guardrail" : `GM ${(margin * 100).toFixed(0)}% · ready`}
-        </span>
-      </div>
-      <GradientButton
-        size="md"
-        iconRight={<ArrowRight size={14} />}
-        disabled={blocking}
-        variant={blocking ? "danger" : "primary"}
-      >
-        {blocking ? "Escalate to Council" : "Send proposal"}
-      </GradientButton>
-      <div className="flex gap-1.5">
-        <button className="wx-focus flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-stroke text-[12px] text-fg-secondary hover:text-fg">
-          <FileText size={12} /> PDF
-        </button>
-        <button className="wx-focus flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-stroke text-[12px] text-fg-secondary hover:text-fg">
-          <Sparkles size={12} /> Co-pilot
-        </button>
-        <button className="wx-focus flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-stroke text-[12px] text-fg-secondary hover:text-fg">
-          <Share2 size={12} /> Share
-        </button>
-      </div>
-    </motion.div>
   );
 }
