@@ -2,7 +2,6 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { motion } from "motion/react";
 import { Globe2, Users2 } from "lucide-react";
 import {
   countryFlag,
@@ -14,8 +13,14 @@ import {
 import { Tag } from "@/components/ui/Panel";
 
 /**
- * Draggable lead card. Sits inside a kanban column.
- * Drag handle = the whole card; on release the parent re-issues the PATCH.
+ * Draggable lead card. Drag handle = the whole card.
+ *
+ * dnd-kit's activation constraint (distance: 6) means a plain click
+ * (no pointer movement) fires onClick instead of starting a drag — so
+ * we put onClick directly on the wrapper. No nested motion.div /
+ * layout animation here: those reflow-on-every-render with dnd-kit's
+ * CSS transform was triggering Safari to OOM-kill the tab after a
+ * minute or so.
  */
 export function LeadCard({
   lead,
@@ -30,31 +35,20 @@ export function LeadCard({
   const days = daysSince(lead.created_at);
 
   return (
-    <motion.div
-      layout
+    <div
       ref={setNodeRef}
       style={{
         transform: CSS.Translate.toString(transform),
         zIndex: isDragging ? 50 : "auto",
       }}
+      onClick={() => onOpen(lead)}
       className={`wx-card-quiet relative cursor-grab select-none p-3 active:cursor-grabbing ${
         isDragging ? "opacity-60 shadow-2xl" : ""
       }`}
       {...attributes}
       {...listeners}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          // Don't fire on drag end. dnd-kit suppresses clicks during drag,
-          // but defend against accidental opens.
-          e.stopPropagation();
-          onOpen(lead);
-        }}
-        className="absolute inset-0 z-10 w-full h-full cursor-pointer"
-        aria-label={`Open lead ${shortLabel(lead)}`}
-      />
-      <div className="relative flex flex-col gap-2 pointer-events-none">
+      <div className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[13.5px] font-semibold text-fg truncate">
@@ -83,8 +77,8 @@ export function LeadCard({
         </div>
 
         <div className="flex items-center justify-between text-[10.5px] text-fg-muted">
-          <span>{lead.contact_name ?? lead.contact_email ?? "—"}</span>
-          <span className="wx-mono">
+          <span className="truncate">{lead.contact_name ?? lead.contact_email ?? "—"}</span>
+          <span className="wx-mono shrink-0 ml-2">
             {days === 0 ? "today" : `${days}d ago`}
           </span>
         </div>
@@ -117,6 +111,6 @@ export function LeadCard({
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -51,6 +51,7 @@ const ADD_ONS: { id: string; label: string }[] = [
 export function LeadDetail({
   lead,
   pricing = DEFAULT_PRICING,
+  isDraft = false,
   onClose,
   onSave,
   onMarkWon,
@@ -58,9 +59,17 @@ export function LeadDetail({
 }: {
   lead: Lead;
   pricing?: PricingConfig;
+  isDraft?: boolean;
   onClose: () => void;
   onSave: (
-    patch: PendingPatch & { status?: Lead["status"] },
+    patch: PendingPatch & {
+      status?: Lead["status"];
+      company_name?: string;
+      country?: Lead["country"];
+      total_people?: number;
+      contact_name?: string;
+      contact_email?: string;
+    },
   ) => Promise<void>;
   onMarkWon: () => Promise<void>;
   onMarkLost: () => Promise<void>;
@@ -73,14 +82,23 @@ export function LeadDetail({
   const [notes, setNotes] = useState<string>(lead.internal_notes ?? "");
   const [saving, setSaving] = useState<null | "draft" | "send">(null);
 
+  // Draft-only fields (only used when isDraft)
+  const [company, setCompany] = useState<string>(lead.company_name ?? "");
+  const [country, setCountry] = useState<Lead["country"]>(lead.country ?? "uae");
+  const [totalPeople, setTotalPeople] = useState<number>(lead.total_people ?? 100);
+  const [contactName, setContactName] = useState<string>(lead.contact_name ?? "");
+  const [contactEmail, setContactEmail] = useState<string>(lead.contact_email ?? "");
+
+  const effectiveTotal = isDraft ? totalPeople : lead.total_people;
+
   const numbers = useMemo(
     () =>
       calcProposal(
-        { total_people: lead.total_people, add_on_modules: modules },
+        { total_people: effectiveTotal, add_on_modules: modules },
         pricing,
         discountPct,
       ),
-    [lead.total_people, modules, pricing, discountPct],
+    [effectiveTotal, modules, pricing, discountPct],
   );
 
   const dirty =
@@ -103,11 +121,22 @@ export function LeadDetail({
         discount_pct: discountPct,
         internal_notes: notes || undefined,
         status: opts.status,
+        ...(isDraft
+          ? {
+              company_name: company,
+              country,
+              total_people: totalPeople,
+              contact_name: contactName || undefined,
+              contact_email: contactEmail || undefined,
+            }
+          : {}),
       });
     } finally {
       setSaving(null);
     }
   }
+
+  const canSaveDraft = isDraft ? company.trim().length > 0 && totalPeople >= 1 : true;
 
   return (
     <AnimatePresence>
@@ -151,7 +180,22 @@ export function LeadDetail({
         </div>
 
         <div className="flex flex-col gap-5 p-5">
-          <LeadSummary lead={lead} />
+          {isDraft ? (
+            <DraftOpportunityForm
+              company={company}
+              setCompany={setCompany}
+              country={country}
+              setCountry={setCountry}
+              totalPeople={totalPeople}
+              setTotalPeople={setTotalPeople}
+              contactName={contactName}
+              setContactName={setContactName}
+              contactEmail={contactEmail}
+              setContactEmail={setContactEmail}
+            />
+          ) : (
+            <LeadSummary lead={lead} />
+          )}
           <ProposalBuilder
             lead={lead}
             pricing={pricing}
@@ -173,43 +217,201 @@ export function LeadDetail({
           </Panel>
 
           <div className="sticky bottom-0 -mx-5 -mb-5 border-t border-stroke bg-page/95 backdrop-blur-xl px-5 py-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onMarkLost}
-              className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg hover:border-[color:var(--wx-danger)]"
-            >
-              Mark lost
-            </button>
-            <button
-              type="button"
-              onClick={onMarkWon}
-              className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[13px] font-medium text-[color:var(--wx-success)]"
-              style={{ borderColor: "rgba(30,169,124,0.4)" }}
-            >
-              <Trophy size={13} /> Mark won
-            </button>
+            {!isDraft && (
+              <>
+                <button
+                  type="button"
+                  onClick={onMarkLost}
+                  className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg hover:border-[color:var(--wx-danger)]"
+                >
+                  Mark lost
+                </button>
+                <button
+                  type="button"
+                  onClick={onMarkWon}
+                  className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[13px] font-medium text-[color:var(--wx-success)]"
+                  style={{ borderColor: "rgba(30,169,124,0.4)" }}
+                >
+                  <Trophy size={13} /> Mark won
+                </button>
+              </>
+            )}
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => persist({ status: "priced", label: "draft" })}
-                disabled={!dirty || !!saving}
+                disabled={(!dirty && !isDraft) || !canSaveDraft || !!saving}
                 className="wx-focus inline-flex h-11 items-center gap-2 rounded-full border border-stroke px-4 text-[13px] text-fg-secondary hover:text-fg disabled:opacity-40 disabled:pointer-events-none"
               >
-                {saving === "draft" ? "Saving…" : "Save as priced"}
+                {saving === "draft"
+                  ? "Saving…"
+                  : isDraft
+                    ? "Save as priced"
+                    : "Save as priced"}
               </button>
               <GradientButton
                 size="md"
                 onClick={() => persist({ status: "proposed", label: "send" })}
-                disabled={!!saving}
+                disabled={!canSaveDraft || !!saving}
                 iconRight={<Sparkles size={13} />}
               >
-                {saving === "send" ? "Sending…" : "Send proposal"}
+                {saving === "send"
+                  ? "Sending…"
+                  : isDraft
+                    ? "Create + send proposal"
+                    : "Send proposal"}
               </GradientButton>
             </div>
           </div>
         </div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+function DraftOpportunityForm({
+  company,
+  setCompany,
+  country,
+  setCountry,
+  totalPeople,
+  setTotalPeople,
+  contactName,
+  setContactName,
+  contactEmail,
+  setContactEmail,
+}: {
+  company: string;
+  setCompany: (v: string) => void;
+  country: Lead["country"];
+  setCountry: (v: Lead["country"]) => void;
+  totalPeople: number;
+  setTotalPeople: (v: number) => void;
+  contactName: string;
+  setContactName: (v: string) => void;
+  contactEmail: string;
+  setContactEmail: (v: string) => void;
+}) {
+  const countries: { id: NonNullable<Lead["country"]>; label: string; flag: string }[] = [
+    { id: "uae", label: "UAE", flag: "🇦🇪" },
+    { id: "ksa", label: "Saudi", flag: "🇸🇦" },
+    { id: "ph", label: "Philippines", flag: "🇵🇭" },
+  ];
+  return (
+    <Panel
+      eyebrow="New opportunity"
+      title="About this deal"
+      trailing={<Tag tone="warm">Draft</Tag>}
+    >
+      <div className="flex flex-col gap-4">
+        <Field label="Company" required>
+          <input
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            placeholder="e.g. Aurora Capital"
+            className="wx-focus w-full rounded-xl border border-stroke bg-card-elev px-3 py-2.5 text-[14px] font-medium text-fg outline-none placeholder:text-fg-muted"
+          />
+        </Field>
+
+        <div className="flex flex-col gap-1.5">
+          <Eyebrow>Country</Eyebrow>
+          <div className="grid grid-cols-3 gap-2">
+            {countries.map((c) => {
+              const active = country === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCountry(c.id)}
+                  className={`wx-focus rounded-xl border px-3 py-2 text-[12.5px] font-medium transition-colors ${
+                    active
+                      ? "border-transparent text-white"
+                      : "border-stroke bg-card text-fg-secondary hover:text-fg hover:border-wx-purple/40"
+                  }`}
+                  style={
+                    active
+                      ? {
+                          background: "var(--wx-gradient-warm)",
+                          boxShadow: "0 6px 18px var(--wx-glow-shadow-warm)",
+                        }
+                      : undefined
+                  }
+                >
+                  <span className="mr-1">{c.flag}</span>
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <Field label="People on the plan" required>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={10}
+              max={10000}
+              step={10}
+              value={totalPeople}
+              onChange={(e) => setTotalPeople(Number(e.target.value))}
+              className="flex-1"
+              style={{ accentColor: "var(--wx-purple)" }}
+              aria-label="Total people"
+            />
+            <input
+              type="number"
+              value={totalPeople}
+              min={1}
+              max={100000}
+              onChange={(e) =>
+                setTotalPeople(Math.max(1, Number(e.target.value) || 0))
+              }
+              className="wx-focus wx-mono w-24 rounded-xl border border-stroke bg-card-elev px-3 py-2 text-[14px] text-fg outline-none"
+            />
+          </div>
+        </Field>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Contact name">
+            <input
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              placeholder="Who the team's talking to"
+              className="wx-focus w-full rounded-xl border border-stroke bg-card-elev px-3 py-2.5 text-[13.5px] text-fg outline-none placeholder:text-fg-muted"
+            />
+          </Field>
+          <Field label="Contact email">
+            <input
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="contact@company.com"
+              className="wx-focus w-full rounded-xl border border-stroke bg-card-elev px-3 py-2.5 text-[13.5px] text-fg outline-none placeholder:text-fg-muted"
+            />
+          </Field>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Eyebrow>
+        {label}
+        {required ? <span className="text-wx-orange ml-0.5">*</span> : null}
+      </Eyebrow>
+      {children}
+    </div>
   );
 }
 

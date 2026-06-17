@@ -1,14 +1,54 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
-import { GradientButton } from "@/components/ui/GradientButton";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowRight, Inbox, RefreshCw, Sparkles } from "lucide-react";
 import { Eyebrow } from "@/components/ui/atoms";
 import { useDevice } from "@/components/providers";
 import { type Lead } from "@/lib/team-leads";
 import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 import { TeamInbox } from "./Inbox";
 import { LeadDetail } from "./LeadDetail";
+
+const DRAFT_ID = "__draft__";
+
+function buildDraftLead(): Lead {
+  return {
+    id: DRAFT_ID,
+    reference: "DRAFT",
+    status: "submitted",
+    for_who: "team",
+    country: "uae",
+    goals: [],
+    sourcing: "direct",
+    insurer: null,
+    insurer_other_name: null,
+    ksa_broker: null,
+    broker_name: null,
+    broker_email: null,
+    broker_phone: null,
+    company_name: "",
+    authorize_wellx_contact: false,
+    total_people: 100,
+    employee_count: 50,
+    dependant_count: 50,
+    add_on_modules: [],
+    contact_name: null,
+    contact_email: null,
+    contact_phone: null,
+    contact_role: null,
+    hr_contact_email: null,
+    notes: null,
+    discount_pct: 0,
+    pricing_pmpm: null,
+    pricing_monthly: null,
+    internal_notes: null,
+    assigned_to: null,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    priced_at: null,
+    proposed_at: null,
+  };
+}
 
 type LoadState =
   | { phase: "idle" }
@@ -22,6 +62,7 @@ export function TeamExperience() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [pricing, setPricing] = useState<PricingConfig>(DEFAULT_PRICING);
   const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Lead | null>(null);
   const [load, setLoad] = useState<LoadState>({ phase: "idle" });
 
   const fetchLeads = useCallback(async () => {
@@ -99,6 +140,39 @@ export function TeamExperience() {
     async (
       patch: Partial<Lead> & { status?: Lead["status"] },
     ): Promise<void> => {
+      // Draft proposal — POST a new lead.
+      if (draft && openLeadId === DRAFT_ID) {
+        const body = {
+          ...draft,
+          ...patch,
+          // strip non-DB fields
+          id: undefined,
+          reference: undefined,
+          created_at: undefined,
+          updated_at: undefined,
+          priced_at: undefined,
+          proposed_at: undefined,
+        };
+        const res = await fetch("/api/team/leads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          lead?: Lead;
+          error?: string;
+        };
+        if (!res.ok || !data.ok || !data.lead) {
+          throw new Error(data.error ?? `Save failed (${res.status})`);
+        }
+        // Insert into local inbox + switch the open drawer to the saved row
+        setLeads((ls) => [data.lead!, ...ls]);
+        setDraft(null);
+        setOpenLeadId(data.lead.id);
+        return;
+      }
+
       if (!openLeadId) return;
       const previous = leads;
       // optimistic
@@ -129,15 +203,33 @@ export function TeamExperience() {
         throw err;
       }
     },
-    [openLeadId, leads],
+    [draft, openLeadId, leads],
   );
 
-  const openLead = openLeadId
-    ? leads.find((l) => l.id === openLeadId) ?? null
-    : null;
+  const openLead = useMemo(() => {
+    if (openLeadId === DRAFT_ID) return draft;
+    if (!openLeadId) return null;
+    return leads.find((l) => l.id === openLeadId) ?? null;
+  }, [openLeadId, draft, leads]);
+
+  const startNewProposal = useCallback(() => {
+    setDraft(buildDraftLead());
+    setOpenLeadId(DRAFT_ID);
+    setIntro(false);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setOpenLeadId(null);
+    setDraft(null);
+  }, []);
 
   if (intro) {
-    return <Intro onStart={() => setIntro(false)} />;
+    return (
+      <Intro
+        onOpenInbox={() => setIntro(false)}
+        onNewProposal={startNewProposal}
+      />
+    );
   }
 
   return (
@@ -151,6 +243,7 @@ export function TeamExperience() {
         loading={load.phase === "loading"}
         onMove={onMove}
         onOpen={(l) => setOpenLeadId(l.id)}
+        onNewProposal={startNewProposal}
       />
       {load.phase === "error" && (
         <div className="mt-4 flex items-center justify-between rounded-xl border px-3 py-2 text-[12px]"
@@ -175,21 +268,22 @@ export function TeamExperience() {
         <>
           <div
             className="fixed inset-0 z-30 bg-page/40 backdrop-blur-sm"
-            onClick={() => setOpenLeadId(null)}
+            onClick={closeDrawer}
           />
           <LeadDetail
             key={openLead.id}
             lead={openLead}
             pricing={pricing}
-            onClose={() => setOpenLeadId(null)}
+            isDraft={openLead.id === DRAFT_ID}
+            onClose={closeDrawer}
             onSave={onSave}
             onMarkWon={async () => {
               await onSave({ status: "won" });
-              setOpenLeadId(null);
+              closeDrawer();
             }}
             onMarkLost={async () => {
               await onSave({ status: "lost" });
-              setOpenLeadId(null);
+              closeDrawer();
             }}
           />
         </>
@@ -198,7 +292,13 @@ export function TeamExperience() {
   );
 }
 
-function Intro({ onStart }: { onStart: () => void }) {
+function Intro({
+  onOpenInbox,
+  onNewProposal,
+}: {
+  onOpenInbox: () => void;
+  onNewProposal: () => void;
+}) {
   const { device } = useDevice();
   return (
     <div className="mx-auto max-w-[1200px] px-6 py-12 sm:py-16 lg:py-20">
@@ -219,15 +319,63 @@ function Intro({ onStart }: { onStart: () => void }) {
           opportunity.
         </h1>
         <p className="max-w-xl text-[15px] sm:text-[16px] leading-relaxed text-fg-secondary">
-          Every brief the Customer Studio captured lands in the inbox. Drag
-          to triage, click to price, save to send. The discount lever is
+          Either work the inbox of briefs the Customer Studio captured, or
+          spin up a new opportunity from scratch. The discount lever is
           capped at 10% for now &mdash; Founders pricing controls will
           widen this later.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <GradientButton size="lg" onClick={onStart} iconRight={<ArrowRight size={16} />}>
-            Open the inbox
-          </GradientButton>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          <button
+            type="button"
+            onClick={onOpenInbox}
+            className="wx-focus group flex flex-col gap-2 rounded-2xl border border-stroke bg-card p-5 text-left transition-colors hover:border-wx-purple/40 wx-lift"
+          >
+            <span
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl"
+              style={{
+                background: "var(--wx-gradient-warm)",
+                boxShadow: "0 6px 22px var(--wx-glow-shadow-warm)",
+              }}
+            >
+              <Inbox size={16} className="text-white" />
+            </span>
+            <span className="text-[15px] font-semibold text-fg mt-1">
+              Open the inbox
+            </span>
+            <span className="text-[12.5px] text-fg-secondary leading-relaxed">
+              Triage, price, and send proposals for every customer brief in
+              the pipeline.
+            </span>
+            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-fg-secondary group-hover:text-fg">
+              Go to inbox <ArrowRight size={12} />
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onNewProposal}
+            className="wx-focus group flex flex-col gap-2 rounded-2xl border border-stroke bg-card p-5 text-left transition-colors hover:border-wx-purple/40 wx-lift"
+          >
+            <span
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl"
+              style={{
+                background: "var(--wx-gradient-cool)",
+                boxShadow: "0 6px 22px var(--wx-glow-shadow)",
+              }}
+            >
+              <Sparkles size={16} className="text-white" />
+            </span>
+            <span className="text-[15px] font-semibold text-fg mt-1">
+              Price a new opportunity
+            </span>
+            <span className="text-[12.5px] text-fg-secondary leading-relaxed">
+              Spin up a fresh proposal without a customer-submitted brief.
+              Captured straight into the pipeline.
+            </span>
+            <span className="inline-flex items-center gap-1 text-[12px] font-medium text-fg-secondary group-hover:text-fg">
+              Start fresh <ArrowRight size={12} />
+            </span>
+          </button>
         </div>
       </div>
     </div>

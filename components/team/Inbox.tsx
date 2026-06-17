@@ -11,8 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { motion } from "motion/react";
-import { Inbox, Search } from "lucide-react";
+import { Inbox, Plus, Search } from "lucide-react";
 import {
   countryFlag,
   LEAD_STATUSES,
@@ -42,11 +41,13 @@ export function TeamInbox({
   loading,
   onMove,
   onOpen,
+  onNewProposal,
 }: {
   leads: Lead[];
   loading?: boolean;
   onMove: (id: string, status: Lead["status"]) => Promise<void>;
   onOpen: (lead: Lead) => void;
+  onNewProposal: () => void;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -127,11 +128,24 @@ export function TeamInbox({
               it through the pipeline; click to price it.
             </p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-w-0">
-            <StatPill label="Total" value={String(stats.total)} />
-            <StatPill label="New" value={String(stats.submitted)} delta="+inbox" />
-            <StatPill label="Priced" value={String(stats.priced)} />
-            <StatPill label="Won" value={String(stats.won)} />
+          <div className="flex flex-col items-end gap-3">
+            <button
+              type="button"
+              onClick={onNewProposal}
+              className="wx-focus inline-flex h-10 items-center gap-2 rounded-full px-4 text-[12.5px] font-medium text-white"
+              style={{
+                background: "var(--wx-gradient-warm)",
+                boxShadow: "0 8px 24px var(--wx-glow-shadow-warm)",
+              }}
+            >
+              <Plus size={13} /> New proposal
+            </button>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-w-0">
+              <StatPill label="Total" value={String(stats.total)} />
+              <StatPill label="New" value={String(stats.submitted)} delta="+inbox" />
+              <StatPill label="Priced" value={String(stats.priced)} />
+              <StatPill label="Won" value={String(stats.won)} />
+            </div>
           </div>
         </div>
 
@@ -278,11 +292,11 @@ function KanbanColumn({
           <span className="text-[10.5px] text-fg-muted wx-mono">{count}</span>
         </div>
       </div>
-      <motion.div layout className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {leads.map((l) => (
           <LeadCard key={l.id} lead={l} onOpen={onOpen} />
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 }
